@@ -25,9 +25,9 @@
 
       <!-- 說明：跟 K30DayMapChallenge-2026 Day 27 主頁的「說明」一樣（src/data/about.js、share.js）：中文全部在上面，英文全部在下面 -->
       <div class="body">
-        <p class="about">11月28日台灣即將舉行地方大選，全國有18244個投票所，由於投票所不能離每個人住的地方太遠，所以會平均地遍布全台。如果把每個投票地點當成一個投票箱堆在一起，堆越高的地方就是越多人住的地方。用手機打開網頁的AR，就能把它放在你面前看。</p>
+        <p class="about">11月28日台灣即將舉行地方大選，全國有18,248個投票所，由於投票所不能離每個人住的地方太遠，所以會平均地遍布全台。如果把每個投票地點當成一個投票箱堆在一起，堆越高的地方就是越多人住的地方。用手機打開網頁的AR，就能把它放在你面前看。</p>
         <p class="about-src">資料來源：中央選舉委員會、Esri</p>
-        <p class="about-en">Taiwan votes on Nov 28 at 18,244 polling places, spread all over so none is far from home. Pile one ballot box per place: higher piles, more people. See it in AR on your phone.</p>
+        <p class="about-en">Taiwan votes on Nov 28 at 18,248 polling places, spread all over so none is far from home. Pile one ballot box per place: higher piles, more people. See it in AR on your phone.</p>
         <p class="about-src">Data: Central Election Commission (CEC); Esri</p>
       </div>
 
