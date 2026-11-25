@@ -119,7 +119,7 @@ async function startMap() {
     style: { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#e6e6e6' } }] },
     center: VIEW_3D.center, zoom: VIEW_3D.zoom, bearing: VIEW_3D.bearing, pitch: VIEW_3D.pitch,
     maxPitch: 85,
-    attributionControl: { compact: true, customAttribution: '投開票所：中選會；地理編碼：Esri' },
+    attributionControl: false, // 不放地圖上的資料來源標註（說明卡裡已經有資料來源）
   })
   await new Promise((r) => map.once('load', r))
   const ballots = ballotLayer(data.map(([lon, lat], id) => ({ id, lon, lat })), saved, 270)
@@ -189,7 +189,6 @@ onBeforeUnmount(() => { removeEventListener('resize', onResize); map?.remove(); 
 .page { position: fixed; inset: 0; }
 .ar-box { position: absolute; inset: 0; z-index: 1; background: #e6e6e6; } /* 跟 Day 27 的底色一樣 */
 .map { position: absolute; inset: 0; }
-.ar-box :deep(.maplibregl-ctrl-bottom-right) { bottom: 72px; } /* 資料來源標註不要被按鈕蓋住 */
 .controls { position: absolute; z-index: 3; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; } /* 兩個按鈕一樣寬（照長的那個） */
 .controls button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; padding: 0 18px; border: 0; border-radius: 999px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .ar-btn { background: var(--ink); color: #f2f2f2; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2); }
