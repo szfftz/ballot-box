@@ -93,8 +93,67 @@ function shadowSheet(scene, skip) {
 // 模型座標 y 朝上（場景 z 朝上轉過來：場景 (x, y, z) → 模型 (x, z, −y)）
 const SKY = new THREE.Color('#ffffff'), GROUND = new THREE.Color('#5a5a66'), LIGHT = 1.6 / Math.PI
 const SUN = new THREE.Vector3(BALLOT.sun[0], BALLOT.sun[2], -BALLOT.sun[1]).normalize()
+// 太陽方向的深度圖（軟體光柵化，跟 3D 的 shadow map 一樣的意思）：從太陽看過去，每一格記最靠近太陽的深度
+//   之後每個頂點查它那一格：前面有東西擋（深度比它靠近太陽）就在影子裡，太陽光不算；3×3 格平均，邊緣柔一點（3D 是 PCF 柔化）
+const SM = 4096 // 深度圖解析度：桌上 1 公尺 → 一格約 0.3 公釐（箱子 4 公釐）
+function sunDepth(meshes) {
+  const w = SUN.clone(), u = new THREE.Vector3(0, 1, 0).cross(w).normalize(), v = w.clone().cross(u)
+  const proj = (p) => [p.dot(u), p.dot(v), p.dot(w)]
+  const p = new THREE.Vector3()
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+  const all = meshes.map((o) => {
+    const pos = o.geometry.attributes.position, N = pos.count, a = new Float32Array(N * 3)
+    for (let i = 0; i < N; i++) {
+      const [x, y, z] = proj(p.fromBufferAttribute(pos, i))
+      a[i * 3] = x; a[i * 3 + 1] = y; a[i * 3 + 2] = z
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y
+    }
+    return a
+  })
+  const k = (SM - 2) / Math.max(x1 - x0, y1 - y0), W = Math.ceil((x1 - x0) * k) + 2, H = Math.ceil((y1 - y0) * k) + 2
+  const depth = new Float32Array(W * H).fill(-Infinity)
+  const gx = (x) => (x - x0) * k + 0.5, gy = (y) => (y - y0) * k + 0.5
+  meshes.forEach((o, mi) => {
+    const a = all[mi], idx = o.geometry.index, T = idx ? idx.count : a.length / 3
+    for (let t = 0; t < T; t += 3) {
+      const i0 = idx ? idx.getX(t) : t, i1 = idx ? idx.getX(t + 1) : t + 1, i2 = idx ? idx.getX(t + 2) : t + 2
+      const ax = gx(a[i0 * 3]), ay = gy(a[i0 * 3 + 1]), az = a[i0 * 3 + 2]
+      const bx = gx(a[i1 * 3]), by = gy(a[i1 * 3 + 1]), bz = a[i1 * 3 + 2]
+      const cx = gx(a[i2 * 3]), cy = gy(a[i2 * 3 + 1]), cz = a[i2 * 3 + 2]
+      const area = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+      if (Math.abs(area) < 1e-9) continue
+      const minX = Math.max(0, Math.floor(Math.min(ax, bx, cx))), maxX = Math.min(W - 1, Math.ceil(Math.max(ax, bx, cx)))
+      const minY = Math.max(0, Math.floor(Math.min(ay, by, cy))), maxY = Math.min(H - 1, Math.ceil(Math.max(ay, by, cy)))
+      for (let yy = minY; yy <= maxY; yy++) for (let xx = minX; xx <= maxX; xx++) {
+        const px = xx + 0.5, py = yy + 0.5
+        const w0 = ((bx - px) * (cy - py) - (by - py) * (cx - px)) / area
+        const w1 = ((cx - px) * (ay - py) - (cy - py) * (ax - px)) / area
+        const w2 = 1 - w0 - w1
+        if (w0 < -1e-6 || w1 < -1e-6 || w2 < -1e-6) continue
+        const z = w0 * az + w1 * bz + w2 * cz, j = yy * W + xx
+        if (z > depth[j]) depth[j] = z
+      }
+    }
+  })
+  // 這個點照得到太陽的比例（0–1）：3×3 格裡沒被擋的有幾格；bias：往太陽推一點，自己的面不會擋到自己
+  const bias = 2.5 / k
+  return (q) => {
+    const [x, y, z] = proj(q)
+    const cx = Math.floor(gx(x)), cy = Math.floor(gy(y))
+    let lit = 0
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const xx = Math.min(W - 1, Math.max(0, cx + dx)), yy = Math.min(H - 1, Math.max(0, cy + dy))
+      if (z + bias >= depth[yy * W + xx]) lit++
+    }
+    return lit / 9
+  }
+}
+
 function bakeLight(model) {
-  const n = new THREE.Vector3(), c = new THREE.Color()
+  const n = new THREE.Vector3(), c = new THREE.Color(), q = new THREE.Vector3()
+  const lit = []
+  model.traverse((o) => { if (o.isMesh && !o.material.map?.userData?.arFull) lit.push(o) })
+  const sunLit = sunDepth(lit) // 會擋太陽的：除了地上那片影子，全部
   model.traverse((o) => {
     if (!o.isMesh) return
     const m = o.material
@@ -104,7 +163,11 @@ function bakeLight(model) {
     const col = new Float32Array(N * 3)
     for (let i = 0; i < N; i++) {
       n.fromBufferAttribute(nrm, i).normalize()
-      const sun = Math.max(0, n.dot(SUN)) * LIGHT
+      // 雙面的（圈票處的布簾）：three.js 畫背面時把法線反過來打光，看得到的那面（寫字的正面）朝太陽，用朝太陽的那面算
+      if (m.side === THREE.DoubleSide && n.dot(SUN) < 0) n.negate()
+      const d = n.dot(SUN)
+      // 頂點沿法線往外推一點點再查（自己的面、箱子的角落不會誤判成擋住）
+      const sun = d > 0 ? d * LIGHT * sunLit(q.fromBufferAttribute(g.attributes.position, i).addScaledVector(n, 0.0002)) : 0
       c.copy(GROUND).lerp(SKY, 0.5 * n.y + 0.5).multiplyScalar(LIGHT).addScalar(sun)
       if (old) c.multiply({ r: old.getX(i), g: old.getY(i), b: old.getZ(i) })
       col.set([c.r, c.g, c.b], i * 3)
