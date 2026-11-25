@@ -8,6 +8,10 @@
 
     <div ref="arBox" class="ar-box">
       <p v-if="state" class="ar-state"><span class="spin"></span>{{ state }}</p>
+      <button v-if="ready" class="reset" title="回到預設視角" @click="resetView">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.5h4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        回到預設
+      </button>
     </div>
 
     <section class="card" :class="{ open }">
@@ -64,7 +68,8 @@ const state = ref('載入投開票所…')
 const qrSvg = ref('')
 const open = ref(false)
 const mapGone = ref(false)
-let map = null, ballots = null, arUrl = null
+let map = null, ballots = null, arUrl = null, mv = null, cam = null
+const ready = ref(false)
 
 const loadScript = (src, attrs = {}) => new Promise((resolve, reject) => {
   if (document.querySelector(`script[src="${src}"]`)) return resolve()
@@ -127,7 +132,7 @@ async function build() {
   state.value = '做 AR 模型中…'
   await new Promise((r) => setTimeout(r, 1500)) // 等圈票處、排隊小人載好（字型、貼圖）
   const { blob, xf } = await buildArGlb(ballots)
-  const cam = arCamera(xf)
+  cam = arCamera(xf)
   // 模型做好了：地圖用不到，拆掉（手機記憶體）
   map.remove()
   map = null
@@ -135,11 +140,23 @@ async function build() {
   arUrl = URL.createObjectURL(blob)
 
   await loadScript('https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js', { type: 'module' })
-  const mv = document.createElement('model-viewer')
-  for (const [k, v] of Object.entries({ ar: '', 'ar-modes': 'webxr scene-viewer quick-look', 'ar-scale': 'auto', 'camera-controls': '', 'shadow-intensity': '0', 'environment-image': 'neutral', 'tone-mapping': 'neutral', 'camera-orbit': cam.orbit, 'camera-target': cam.target, 'field-of-view': '36.87deg', 'min-camera-orbit': 'auto auto 0.05m', 'max-camera-orbit': 'auto auto 20m', 'ar-placement': 'floor', 'touch-action': 'none', 'interaction-prompt': 'none', exposure: '0.85', alt: '2026 投開票所投票箱 AR 模型', src: arUrl })) mv.setAttribute(k, v)
+  mv = document.createElement('model-viewer')
+  for (const [k, v] of Object.entries({ ar: '', 'ar-modes': 'webxr scene-viewer quick-look', 'ar-scale': 'auto', 'camera-controls': '', 'shadow-intensity': '0', 'environment-image': 'neutral', 'tone-mapping': 'neutral', 'camera-orbit': cam.orbit, 'camera-target': cam.target, 'field-of-view': '36.87deg', 'min-camera-orbit': 'auto 0deg 0.05m', 'max-camera-orbit': 'auto 85deg 20m', 'ar-placement': 'floor', 'touch-action': 'none', 'interaction-prompt': 'none', exposure: '0.85', alt: '2026 投開票所投票箱 AR 模型', src: arUrl })) mv.setAttribute(k, v)
   mv.appendChild(Object.assign(document.createElement('button'), { slot: 'ar-button', className: 'ar-btn', textContent: '放到你面前看（AR）' }))
   arBox.value.appendChild(mv)
+  ready.value = true
   state.value = ''
+}
+
+// 回到預設視角：值跟屬性一樣時 model-viewer 不會動，先改成別的、等它更新完再設回來（會平滑轉回去）
+async function resetView() {
+  if (!mv || !cam) return
+  mv.cameraOrbit = 'auto auto auto'
+  mv.cameraTarget = 'auto auto auto'
+  await mv.updateComplete
+  mv.cameraOrbit = cam.orbit
+  mv.cameraTarget = cam.target
+  mv.fieldOfView = '36.87deg'
 }
 
 async function makeQr() {
@@ -166,10 +183,17 @@ onBeforeUnmount(() => { map?.remove(); if (arUrl) URL.revokeObjectURL(arUrl) })
 .ar-box :deep(model-viewer) { width: 100%; height: 100%; --poster-color: transparent; }
 .ar-box :deep(.ar-btn) { position: absolute; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 12px 22px; border: 0; border-radius: 999px; background: var(--ink); color: #f2f2f2; font-size: 16px; font-weight: 700; cursor: pointer; white-space: nowrap; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); }
 .ar-state { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.reset { position: absolute; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 3; display: flex; align-items: center; gap: 6px; padding: 10px 16px; border: 0; border-radius: 999px; background: var(--card); color: var(--ink); font-size: 14px; font-weight: 700; cursor: pointer; backdrop-filter: blur(8px); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12); }
+.reset:hover { background: #fff; }
 .spin { width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--ink); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .card { position: absolute; z-index: 2; left: 16px; top: 16px; width: 340px; max-height: calc(100% - 32px); overflow: auto; padding: 16px 18px; border-radius: 14px; background: var(--card); backdrop-filter: blur(8px); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08); font-size: 13px; line-height: 1.6; }
+.card { scrollbar-width: thin; scrollbar-color: rgba(22, 22, 22, 0.22) transparent; overscroll-behavior: contain; }
+.card::-webkit-scrollbar { width: 10px; }
+.card::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
+.card::-webkit-scrollbar-thumb { background: rgba(22, 22, 22, 0.18); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
+.card::-webkit-scrollbar-thumb:hover { background-color: rgba(22, 22, 22, 0.34); }
 header { position: relative; }
 .kicker { margin: 0; color: var(--muted); font-size: 12px; }
 h1 { margin: 2px 0 4px; font-size: 22px; font-weight: 900; line-height: 1.25; }
@@ -190,5 +214,6 @@ h2 { margin: 14px 0 4px; font-size: 13px; font-weight: 700; }
   .more { display: block; }
   .card:not(.open) .body { display: none; }
   .qr-wrap { display: none; }
+  .reset { right: 12px; bottom: calc(84px + env(safe-area-inset-bottom)); padding: 9px 14px; font-size: 13px; }
 }
 </style>
