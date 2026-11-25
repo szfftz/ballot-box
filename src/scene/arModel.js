@@ -94,6 +94,11 @@ function shadowSheet(scene, skip) {
 const SKY = new THREE.Color('#ffffff'), GROUND = new THREE.Color('#5a5a66'), LIGHT = 1.6 / Math.PI
 const SUN0 = new THREE.Vector3(BALLOT.sun[0], BALLOT.sun[2], -BALLOT.sun[1]).normalize()
 let SUN = SUN0.clone() // 模型繞 y 轉過（opts.rotY）就跟著轉
+// 半球光的「天」在哪個方向：three.js 的 HemisphereLight 預設從 +y 照，Day 27 的場景是 z 朝上，所以 +y 是「北」：
+//   天的白光從北邊水平照過來、地的灰從南邊（朝北的面亮、朝南的面暗，頂面只拿到一半）；照 3D 實際的樣子烘
+//   場景 +y（北）→ 模型 −z
+const HEMI0 = new THREE.Vector3(0, 0, -1)
+let HEMI = HEMI0.clone()
 // 太陽方向的深度圖（軟體光柵化，跟 3D 的 shadow map 一樣的意思）：從太陽看過去，每一格記最靠近太陽的深度
 //   之後每個頂點查它那一格：前面有東西擋（深度比它靠近太陽）就在影子裡；3×3 格平均，邊緣柔一點（3D 是 PCF 柔化）
 //   影子深淺跟 3D 一樣（BALLOT.shadowIntensity）：在影子裡的太陽光剩 1 − 深淺
@@ -170,7 +175,7 @@ function bakeLight(model) {
       const d = n.dot(SUN)
       // 頂點沿法線往外推一點點再查（自己的面、箱子的角落不會誤判成擋住）
       const sun = d > 0 ? d * LIGHT * (1 - BALLOT.shadowIntensity * (1 - sunLit(q.fromBufferAttribute(g.attributes.position, i).addScaledVector(n, 0.0002)))) : 0
-      c.copy(GROUND).lerp(SKY, 0.5 * n.y + 0.5).multiplyScalar(LIGHT).addScalar(sun)
+      c.copy(GROUND).lerp(SKY, 0.5 * n.dot(HEMI) + 0.5).multiplyScalar(LIGHT).addScalar(sun)
       if (old) c.multiply({ r: old.getX(i), g: old.getY(i), b: old.getZ(i) })
       col.set([c.r, c.g, c.b], i * 3)
     }
@@ -199,6 +204,7 @@ export async function buildArGlb(layer, opts = {}) {
     const rotY = opts.rotY ?? 0
     model.rotation.y = rotY
     SUN = SUN0.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), rotY)
+    HEMI = HEMI0.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), rotY)
     model.updateMatrixWorld(true)
     model.traverse((o) => { if (o.isMesh) o.geometry.applyMatrix4(o.matrixWorld) })
     model.traverse((o) => { o.position.set(0, 0, 0); o.quaternion.identity(); o.scale.set(1, 1, 1) })
