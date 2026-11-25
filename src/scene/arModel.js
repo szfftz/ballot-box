@@ -4,10 +4,11 @@
 //   每樣東西沿著太陽光方向壓扁到地上，畫進一張圖（重疊不會更黑），整張平貼在地上，半透明的灰（跟 3D 同色、同不透明度）
 //   投票箱只留箱身和投票口（投票口改成薄薄的長方形；標誌、名牌一個箱子幾百個三角形，1 萬多個箱子手機跑不動）
 // 用共用的 src/lib/arExport.js 攤平成 glb（同材質合併）；場景是 z 朝上，先轉成 glTF 的 y 朝上
-// iPhone 的 usdz 由 model-viewer 按 AR 時從 glb 現做
+// iPhone 的 usdz 也一起做（buildArGlb(layer, { usdz: true })），scripts/export-ar.mjs 存成 public/model/ 的靜態檔
 import * as THREE from 'three'
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js'
-import { buildArModel } from '../lib/arExport.js'
+import { USDZExporter } from 'three/addons/exporters/USDZExporter.js'
+import { buildArModel, fixUsdz } from '../lib/arExport.js'
 import { BALLOT } from './ballotLayer.js'
 
 export const AR = {
@@ -86,7 +87,7 @@ function shadowSheet(scene, skip) {
 }
 
 /** layer：ballotLayer()；回傳 { blob（.glb）, xf（場景 → 模型的換算：k、ox、oy、oz） } */
-export async function buildArGlb(layer) {
+export async function buildArGlb(layer, opts = {}) {
   const scene = layer.scene
   const hidden = layer.arHide.filter((m) => !m.userData.noExport)
   for (const m of hidden) m.userData.noExport = true
@@ -99,7 +100,9 @@ export async function buildArGlb(layer) {
   try {
     const { model, xf } = buildArModel(scene, { size: AR.sizeM, minR: 0 })
     const glb = await new GLTFExporter().parseAsync(model, { binary: true })
-    return { blob: new Blob([glb], { type: 'model/gltf-binary' }), xf }
+    // usdz：iPhone AR Quick Look 用（同一個模型；scripts/export-ar.mjs 存成靜態檔）
+    const usdz = opts.usdz ? fixUsdz(await new USDZExporter().parseAsync(model)) : null
+    return { blob: new Blob([glb], { type: 'model/gltf-binary' }), glb, usdz, xf }
   } finally {
     scene.rotation.x = rot
     scene.updateMatrixWorld(true)

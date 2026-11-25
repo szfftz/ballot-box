@@ -227,7 +227,7 @@ export function buildArModel(scene, { size: SIZE_M = SIZE, minR = MIN_R, maxInst
 
 // three 的 USDZExporter 把貼圖讀取節點的兩個欄位寫成 token，Apple 的 usdchecker --arkit 會報錯：改成規定的型別；
 // 重新打包時每個檔案的資料都對齊 64 位元組（USDZ 規定）
-function fixUsdz(buf) {
+export function fixUsdz(buf) {
   const files = unzipSync(new Uint8Array(buf))
   for (const name of Object.keys(files)) {
     if (!name.endsWith('.usda')) continue

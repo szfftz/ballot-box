@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "deploy": "bash deploy.sh",
     "fetch:polling": "python3 src/scene/fetch_polling.py",
-    "build:queue": "python3 src/scene/build_queue.py"
+    "build:queue": "python3 src/scene/build_queue.py",
+    "build:ar": "node scripts/export-ar.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.1.0",
+    "puppeteer-core": "^25.18.1",
     "vite": "^6.0.0"
   }
 }
