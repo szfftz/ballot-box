@@ -162,26 +162,27 @@ export const VOTER = {
 }
 
 // 一個小人（原點＝腳底中間，面向 +y＝看著圈票處）；回傳 Mesh 陣列
+// 面數比 Day 27 少（球 14×10、膠囊 2–3 段）：AR 模型裡幾百個小人，手機才跑得動；桌上一個人約 2.5 公分，看不出差別
 function voter(mats, rnd, pose = null) {
   const H = VOTER.h, u = H / 10 // 10 等份：腿 2.6、身體 3.2、頭 4.2（大頭比較可愛）
   const shirt = mats.shirt[Math.floor(rnd() * mats.shirt.length)], pants = mats.pants[Math.floor(rnd() * mats.pants.length)]
   const m = (geo, mat) => new THREE.Mesh(geo, mat)
   const parts = []
   for (const sx of [-1, 1]) {
-    parts.push(m(new THREE.CapsuleGeometry(u * 0.42, u * 1.6, 4, 8).rotateX(Math.PI / 2).translate(sx * u * 0.55, 0, u * 1.3), pants)) // 腿
-    parts.push(m(new THREE.SphereGeometry(u * 0.5, 10, 8).scale(1, 1.3, 0.6).translate(sx * u * 0.55, u * 0.15, u * 0.3), mats.shoes)) // 鞋
+    parts.push(m(new THREE.CapsuleGeometry(u * 0.42, u * 1.6, 2, 6).rotateX(Math.PI / 2).translate(sx * u * 0.55, 0, u * 1.3), pants)) // 腿
+    parts.push(m(new THREE.SphereGeometry(u * 0.5, 6, 4).scale(1, 1.3, 0.6).translate(sx * u * 0.55, u * 0.15, u * 0.3), mats.shoes)) // 鞋
     parts.push(m(pose === 'push' || pose === 'adjust'
-      ? new THREE.CapsuleGeometry(u * 0.32, u * 1.7, 4, 8).translate(sx * u * 1.05, u * 1.9, u * 4.6) // 推：手臂往前伸直
-      : new THREE.CapsuleGeometry(u * 0.32, u * 1.5, 4, 8).rotateX(Math.PI / 2).rotateY(sx * 0.25).translate(sx * u * 1.45, 0, u * 3.7), shirt)) // 手臂
+      ? new THREE.CapsuleGeometry(u * 0.32, u * 1.7, 2, 6).translate(sx * u * 1.05, u * 1.9, u * 4.6) // 推：手臂往前伸直
+      : new THREE.CapsuleGeometry(u * 0.32, u * 1.5, 2, 6).rotateX(Math.PI / 2).rotateY(sx * 0.25).translate(sx * u * 1.45, 0, u * 3.7), shirt)) // 手臂
   }
-  parts.push(m(new THREE.CapsuleGeometry(u * 1.15, u * 1.3, 6, 12).rotateX(Math.PI / 2).translate(0, 0, u * 4.2), shirt)) // 身體
-  parts.push(m(new THREE.SphereGeometry(u * 2.1, 20, 16).translate(0, 0, u * 7.6), mats.skin)) // 頭
+  parts.push(m(new THREE.CapsuleGeometry(u * 1.15, u * 1.3, 3, 10).rotateX(Math.PI / 2).translate(0, 0, u * 4.2), shirt)) // 身體
+  parts.push(m(new THREE.SphereGeometry(u * 2.1, 14, 10).translate(0, 0, u * 7.6), mats.skin)) // 頭
   // 臉（朝 +y）：兩隻眼睛、兩團腮紅，看得出臉朝哪邊
   for (const sx of [-1, 1]) {
-    parts.push(m(new THREE.SphereGeometry(u * 0.26, 8, 6).scale(1, 0.5, 1.25).translate(sx * u * 0.72, u * 1.95, u * 7.75), mats.eye))
-    parts.push(m(new THREE.SphereGeometry(u * 0.36, 8, 6).scale(1, 0.35, 0.7).translate(sx * u * 1.2, u * 1.68, u * 7.1), mats.blush))
+    parts.push(m(new THREE.SphereGeometry(u * 0.26, 5, 4).scale(1, 0.5, 1.25).translate(sx * u * 0.72, u * 1.95, u * 7.75), mats.eye))
+    parts.push(m(new THREE.SphereGeometry(u * 0.36, 5, 4).scale(1, 0.35, 0.7).translate(sx * u * 1.2, u * 1.68, u * 7.1), mats.blush))
   }
-  parts.push(m(new THREE.SphereGeometry(u * 2.18, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.55).rotateX(Math.PI / 2 + 0.35).translate(0, -u * 0.05, u * 7.75), mats.hair)) // 頭髮（蓋住頭頂和後腦）
+  parts.push(m(new THREE.SphereGeometry(u * 2.18, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55).rotateX(Math.PI / 2 + 0.35).translate(0, -u * 0.05, u * 7.75), mats.hair)) // 頭髮（蓋住頭頂和後腦）
   // 後腦勺朝鏡頭時看得到頭髮；臉朝圈票處（+y），從背後看是排隊的樣子
   if (pose === 'push') {
     // 推東西：前後腳分開、整個人往前傾

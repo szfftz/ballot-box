@@ -41,7 +41,8 @@ function shadowSheet(scene, skip) {
     if (!o.geometry.boundingBox) o.geometry.computeBoundingBox()
     eachMatrix(o, (mw) => box.union(bb.copy(o.geometry.boundingBox).applyMatrix4(m.multiplyMatrices(flat, mw))))
   }
-  const S = 4096, x0 = box.min.x, y1 = box.max.y, k = S / Math.max(box.max.x - x0, y1 - box.min.y)
+  // 最長邊 2048 px（含邊界）：手機 GPU 的貼圖上限多半是 4096，超過 Android Scene Viewer 整個模型都不顯示；桌上 1 公尺約 0.5 公釐一格，夠細
+  const S = 2044, x0 = box.min.x, y1 = box.max.y, k = S / Math.max(box.max.x - x0, y1 - box.min.y)
   const W = Math.ceil((box.max.x - x0) * k) + 2, H = Math.ceil((y1 - box.min.y) * k) + 2
   const c = document.createElement('canvas')
   c.width = W

@@ -18,22 +18,20 @@
 
     <section class="card" :class="{ open }">
       <header>
-        <p class="kicker">2026-11-28 · 115 年地方公職人員選舉</p>
         <h1>Lining Up for Democracy</h1>
         <p class="title-zh">為民主排隊</p>
         <button class="more" @click="open = !open">{{ open ? '收起說明' : '說明' }}</button>
       </header>
 
+      <!-- 說明：跟 K30DayMapChallenge-2026 Day 27 主頁的「說明」一樣（src/data/about.js、share.js）：中文全部在上面，英文全部在下面 -->
       <div class="body">
-        <p>一個地點一個投票箱，從 2,000 公尺高掉下來，撞到地面或別的箱子會彈開、翻滾、堆起來，排出台灣的形狀。外圍一圈是排隊的小人，分成三段排到三排圈票處。</p>
-        <p>用手機打開，按「放到你面前看（AR）」，鏡頭對著地板，模型就會放在你面前：最長邊 100 公分（1 : 50 萬），2 公里的箱子約 4 公釐，可以兩指放大。</p>
-
-        <h2>資料來源</h2>
-        <ul class="src">
-          <li>投開票所：中央選舉委員會「115年11月28日地方公職人員選舉投票所地點」<br><a href="https://info.cec.gov.tw/vote2026/voteSearch/" target="_blank" rel="noopener">info.cec.gov.tw/vote2026/voteSearch</a></li>
-          <li>地址轉座標：Esri ArcGIS World Geocoding Service</li>
-          <li>箱子掉落：物理引擎 Rapier 算好存下來（同一個地址的投開票所併成一個箱子）</li>
-        </ul>
+        <p class="cap-title">30DayMapChallenge<span class="dot">·</span>Day 27<span class="dot">·</span>New tool</p>
+        <p class="about">2026年11月28日是台灣的地方大選，全國共設有1萬8,244個投票所，由於投票所不能離每個人住的地方太遠，所以會平均地遍布全台。如果把每個投票地點當成一個投票箱堆在一起，堆越高的地方就是越多台灣人住的地方。</p>
+        <p class="about-src">資料來源：中央選舉委員會、Esri</p>
+        <p class="tags"><span v-for="t in TAGS_ZH" :key="t">{{ t }}</span></p>
+        <p class="about-en">Taiwan votes on November 28, 2026. There are 18,244 polling places. They can't be far from people's homes, so they are all over Taiwan. Make one ballot box for each place and pile them up. Higher piles mean more people live there.</p>
+        <p class="about-src">Data: Central Election Commission (CEC); Esri</p>
+        <p class="tags"><span v-for="t in TAGS" :key="t">{{ t }}</span></p>
       </div>
 
       <div v-if="qrSvg" class="qr-wrap">
@@ -49,6 +47,8 @@ import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { VIEW_3D } from './view.js'
 
 const BASE = import.meta.env.BASE_URL
+const TAGS_ZH = ['#30天地圖挑戰', '#台灣', '#選舉', '#投票', '#投票匭']
+const TAGS = ['#30daymapchallenge', '#taiwan', '#election', '#vote', '#ballotbox']
 const BUILD = new URLSearchParams(location.search).has('build')
 
 const arBox = ref(null)
@@ -158,11 +158,11 @@ onBeforeUnmount(() => { removeEventListener('resize', onResize); blobs.forEach((
 .page { position: fixed; inset: 0; }
 .ar-box { position: absolute; inset: 0; z-index: 1; background: var(--bg); } /* 比 3D 的地面深一點，白箱子才看得清楚 */
 .ar-box :deep(model-viewer) { width: 100%; height: 100%; --poster-color: transparent; }
-.controls { position: absolute; z-index: 3; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; }
-.controls button { display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; font-weight: 700; cursor: pointer; white-space: nowrap; }
-.ar-btn { padding: 12px 22px; background: var(--ink); color: #f2f2f2; font-size: 16px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); }
+.controls { position: absolute; z-index: 3; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; } /* 兩個按鈕一樣寬（照長的那個） */
+.controls button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; padding: 0 18px; border: 0; border-radius: 999px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.ar-btn { background: var(--ink); color: #f2f2f2; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2); }
 .ar-state { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; display: flex; align-items: center; gap: 10px; font-size: 15px; }
-.reset { padding: 11px 16px; background: var(--card); color: var(--ink); font-size: 14px; backdrop-filter: blur(8px); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12); }
+.reset { background: var(--card); color: var(--ink); backdrop-filter: blur(8px); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12); }
 .reset:hover { background: #fff; }
 .spin { width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--ink); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -174,14 +174,17 @@ onBeforeUnmount(() => { removeEventListener('resize', onResize); blobs.forEach((
 .card::-webkit-scrollbar-thumb { background: rgba(22, 22, 22, 0.18); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
 .card::-webkit-scrollbar-thumb:hover { background-color: rgba(22, 22, 22, 0.34); }
 header { position: relative; }
-.kicker { margin: 0; color: var(--muted); font-size: 12px; }
 h1 { margin: 2px 0 4px; font-size: 22px; font-weight: 900; line-height: 1.25; }
 .title-zh { margin: 0; font-size: 15px; font-weight: 700; }
 .more { display: none; position: absolute; right: 0; top: 0; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: transparent; font-size: 12px; cursor: pointer; }
-.body p { margin: 10px 0 0; }
-h2 { margin: 14px 0 4px; font-size: 13px; font-weight: 700; }
-.src { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
-.src li { margin: 2px 0; }
+.body { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.cap-title { margin: 0 0 6px; font-family: Overpass, sans-serif; font-size: 13px; font-weight: 700; color: var(--accent); }
+.cap-title .dot { margin: 0 .45em; }
+.about { margin: 0; font-size: 13px; line-height: 1.7; }
+.about-src { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.about-en { margin: 14px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.tags { display: flex; flex-wrap: wrap; gap: 0 .6em; margin: 4px 0 0; color: var(--accent); font-size: 12px; line-height: 1.6; }
+.tags span { white-space: nowrap; }
 .qr-wrap { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); text-align: center; color: var(--muted); font-size: 12px; }
 .qr { width: 150px; margin: 0 auto 4px; padding: 6px; border-radius: 8px; background: #fff; }
 .qr :deep(svg) { display: block; width: 100%; height: auto; }
@@ -206,14 +209,12 @@ h2 { margin: 14px 0 4px; font-size: 13px; font-weight: 700; }
 @media (max-width: 700px) {
   .card { left: calc(10px + env(safe-area-inset-left)); right: calc(10px + env(safe-area-inset-right)); width: auto; max-height: calc(100% - 100px); }
   .controls { gap: 8px; bottom: calc(20px + env(safe-area-inset-bottom)); }
-  .ar-btn { padding: 12px 18px; font-size: 15px; }
-  .reset { padding: 11px 14px; font-size: 13px; }
+  .controls button { height: 42px; padding: 0 14px; font-size: 13px; }
 }
 /* 手機橫放：卡片在左上、窄；按鈕貼近底邊 */
 @media (max-height: 500px) and (min-width: 701px) {
   .card { left: calc(10px + env(safe-area-inset-left)); width: 280px; max-height: calc(100% - 20px); }
   .controls { bottom: calc(12px + env(safe-area-inset-bottom)); }
-  .ar-btn { padding: 10px 18px; font-size: 15px; }
-  .reset { padding: 10px 14px; font-size: 13px; }
+  .controls button { height: 40px; padding: 0 14px; font-size: 13px; }
 }
 </style>
