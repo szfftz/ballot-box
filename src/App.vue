@@ -69,11 +69,14 @@ function pads() {
   const W = mapEl.value.clientWidth, H = mapEl.value.clientHeight
   const card = document.querySelector('.card')?.getBoundingClientRect()
   const box = mapEl.value.getBoundingClientRect()
-  // 說明卡蓋在地圖上面（手機：卡片橫跨地圖）才讓出上面；電腦的卡片在地圖左邊，不用
-  const overlapTop = card && card.right > box.left + 10 && card.left < box.right - 10 && card.width > box.width * 0.6 ? Math.max(0, card.bottom - box.top) : 0
-  return { W, H, t: overlapTop + 16, b: 84, l: 16, r: 16 }
+  // 說明卡蓋在地圖上面才讓：橫跨整個寬度（手機直的、平板直的）讓出上面；窄的在左上（手機橫的）讓出左邊；電腦的卡片在地圖旁邊，不用
+  const over = card && card.right > box.left + 10 && card.left < box.right - 10 && card.top < box.bottom
+  const wide = over && card.width > box.width * 0.6
+  const top = wide ? Math.max(0, card.bottom - box.top) : 0, left = over && !wide ? Math.max(0, card.right - box.left) : 0
+  return { W, H, t: top + 16, b: 84, l: left + 16, r: 16 }
 }
 function fitView() {
+  if (!map || !PTS.length) return // 資料還沒好（視窗大小先變了）
   const { W, H, t, b, l, r } = pads()
   map.jumpTo({ center: VIEW_3D.center, zoom: VIEW_3D.zoom, bearing: VIEW_3D.bearing, pitch: VIEW_3D.pitch })
   for (let i = 0; i < 8; i++) {
@@ -85,6 +88,7 @@ function fitView() {
     y0 -= (y1 - y0) * 0.06 // 人、圈票處是立起來的（約 15 km 高），上面多留一點
     const aw = W - l - r, ah = H - t - b
     const k = Math.min(aw / (x1 - x0), ah / (y1 - y0))
+    if (!Number.isFinite(k) || k <= 0) break
     const tx = l + aw / 2, ty = t + ah / 2, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
     const c = map.unproject([W / 2 + (cx - tx), H / 2 + (cy - ty)])
     map.jumpTo({ center: c, zoom: map.getZoom() + Math.max(-2, Math.min(2, Math.log2(k))) }) // 一次最多縮放 2 級，不會跑掉
@@ -217,21 +221,19 @@ h1 { margin: 2px 0 4px; font-size: 22px; font-weight: 900; line-height: 1.25; }
 /* ── RWD ──
    平板（≤1100）：卡片窄一點
    手機直立（≤700 寬）、手機橫放（≤500 高）：說明收起來只留標題（點「說明」展開）、不放 QR code */
-/* 電腦、平板：模型只放在卡片右邊（不被卡片蓋住）；底色跟模型一樣，看不出分界 */
+/* 電腦、橫的平板：地圖整個畫面（天空、地面的漸層接得起來），卡片浮在左邊；模型置中在卡片右邊（fitView 讓出卡片），按鈕也是 */
 .page { background: #e6e6e6; }
 @media (min-width: 701px) and (min-height: 501px) and (orientation: landscape) {
-  .ar-box { left: 372px; }
   .controls { left: calc(50% + 186px); }
 }
 @media (min-width: 701px) and (max-width: 1100px) and (min-height: 501px) and (orientation: landscape) {
-  .ar-box { left: 332px; }
   .controls { left: calc(50% + 166px); }
 }
 @media (max-width: 1100px) {
   .card { width: 300px; }
   h1 { font-size: 20px; }
 }
-@media (max-width: 700px), (max-height: 500px) {
+@media (max-width: 700px), (max-height: 500px), (max-width: 1100px) and (orientation: portrait) {
   .card { top: calc(10px + env(safe-area-inset-top)); padding: 12px 14px; }
   header { padding-right: 64px; } /* 讓出「說明」按鈕 */
   h1 { font-size: 18px; }
@@ -241,7 +243,7 @@ h1 { margin: 2px 0 4px; font-size: 22px; font-weight: 900; line-height: 1.25; }
   .qr-wrap { display: none; }
 }
 /* 手機直立：卡片左右撐滿；底下兩個按鈕小一點才並排得下 */
-@media (max-width: 700px) {
+@media (max-width: 700px), (max-width: 1100px) and (orientation: portrait) {
   .card { left: calc(10px + env(safe-area-inset-left)); right: calc(10px + env(safe-area-inset-right)); width: auto; max-height: calc(100% - 100px); }
   .controls { gap: 8px; bottom: calc(20px + env(safe-area-inset-bottom)); }
   .controls button { height: 42px; padding: 0 14px; font-size: 13px; }
