@@ -127,6 +127,12 @@ export async function buildArGlb(layer, opts = {}) {
   scene.rotation.x = -Math.PI / 2 // z 朝上 → y 朝上
   try {
     const { model, xf } = buildArModel(scene, { size: AR.sizeM, minR: 0 })
+    // 縮放（1 : 50 萬）、位移直接烘進頂點，節點都不帶變換：USDZExporter 讀 matrixWorld（沒更新就是單位矩陣，
+    //   iPhone 的模型會變成實際大小 500 公里，AR 打開什麼都看不到）；glb 也直接是公尺，Scene Viewer 不用自己算縮放
+    model.updateMatrixWorld(true)
+    model.traverse((o) => { if (o.isMesh) o.geometry.applyMatrix4(o.matrixWorld) })
+    model.traverse((o) => { o.position.set(0, 0, 0); o.quaternion.identity(); o.scale.set(1, 1, 1) })
+    model.updateMatrixWorld(true)
     // usdz：iPhone AR Quick Look 用（scripts/export-ar.mjs 存成靜態檔）；USDZ 只吃 MeshStandardMaterial，
     //   所以在烘光之前做（Quick Look 用真實環境的光打，不用烘）
     const usdz = opts.usdz ? fixUsdz(await new USDZExporter().parseAsync(model)) : null

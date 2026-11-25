@@ -16,6 +16,9 @@
       <button v-if="canAr" class="ar-btn" @click="mv.activateAR()">放到你面前看（AR）</button>
     </div>
 
+    <!-- 簽名：整頁最下面、置中（手機收起說明也看得到） -->
+    <p class="sign">szfftz</p>
+
     <section class="card" :class="{ open }">
       <header>
         <h1>Lining Up for Democracy</h1>
@@ -35,7 +38,6 @@
         <div class="qr" v-html="qrSvg"></div>
         <p>想用 AR 看？用手機相機掃這個 QR code，打開網頁後按「放到你面前看（AR）」，模型就會出現在你面前的地板上。</p>
       </div>
-      <p class="sign">szfftz</p>
     </section>
   </div>
 </template>
@@ -157,7 +159,7 @@ onBeforeUnmount(() => { removeEventListener('resize', onResize); blobs.forEach((
 .page { position: fixed; inset: 0; }
 .ar-box { position: absolute; inset: 0; z-index: 1; background: var(--bg); } /* 比 3D 的地面深一點，白箱子才看得清楚 */
 .ar-box :deep(model-viewer) { width: 100%; height: 100%; --poster-color: transparent; }
-.controls { position: absolute; z-index: 3; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; } /* 兩個按鈕一樣寬（照長的那個） */
+.controls { position: absolute; z-index: 3; left: 50%; bottom: calc(34px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; } /* 兩個按鈕一樣寬（照長的那個） */
 .controls button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; padding: 0 18px; border: 0; border-radius: 999px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .ar-btn { background: var(--ink); color: #f2f2f2; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2); }
 .ar-state { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; display: flex; align-items: center; gap: 10px; font-size: 15px; }
@@ -180,7 +182,7 @@ h1 { margin: 2px 0 4px; font-size: 22px; font-weight: 900; line-height: 1.25; }
 .about { margin: 0; font-size: 13px; line-height: 1.7; }
 .about-src { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .about-en { margin: 14px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
-.sign { margin: 14px 0 0; text-align: center; font-family: Overpass, sans-serif; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .02em; }
+.sign { position: absolute; z-index: 3; left: 50%; bottom: calc(8px + env(safe-area-inset-bottom)); transform: translateX(-50%); margin: 0; font-family: Overpass, sans-serif; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .02em; pointer-events: none; }
 .qr-wrap { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); text-align: center; color: var(--muted); font-size: 12px; }
 .qr { width: 150px; margin: 0 auto 4px; padding: 6px; border-radius: 8px; background: #fff; }
 .qr :deep(svg) { display: block; width: 100%; height: auto; }
@@ -192,11 +194,11 @@ h1 { margin: 2px 0 4px; font-size: 22px; font-weight: 900; line-height: 1.25; }
 .page { background: var(--bg); }
 @media (min-width: 701px) and (min-height: 501px) and (orientation: landscape) {
   .ar-box { left: 372px; }
-  .controls { left: calc(50% + 186px); }
+  .controls, .sign { left: calc(50% + 186px); }
 }
 @media (min-width: 701px) and (max-width: 1100px) and (min-height: 501px) and (orientation: landscape) {
   .ar-box { left: 332px; }
-  .controls { left: calc(50% + 166px); }
+  .controls, .sign { left: calc(50% + 166px); }
 }
 @media (max-width: 1100px) {
   .card { width: 300px; }
@@ -208,19 +210,20 @@ h1 { margin: 2px 0 4px; font-size: 22px; font-weight: 900; line-height: 1.25; }
   h1 { font-size: 18px; }
   .title-zh { font-size: 14px; }
   .more { display: block; }
-  .card:not(.open) .body, .card:not(.open) .sign { display: none; }
+  .card:not(.open) .body { display: none; }
   .qr-wrap { display: none; }
 }
 /* 手機直立：卡片左右撐滿；底下兩個按鈕小一點才並排得下 */
 @media (max-width: 700px) {
   .card { left: calc(10px + env(safe-area-inset-left)); right: calc(10px + env(safe-area-inset-right)); width: auto; max-height: calc(100% - 100px); }
-  .controls { gap: 8px; bottom: calc(20px + env(safe-area-inset-bottom)); }
+  .controls { gap: 8px; bottom: calc(32px + env(safe-area-inset-bottom)); }
   .controls button { height: 42px; padding: 0 14px; font-size: 13px; }
 }
 /* 手機橫放：卡片在左上、窄；按鈕貼近底邊 */
 @media (max-height: 500px) and (min-width: 701px) {
   .card { left: calc(10px + env(safe-area-inset-left)); width: 280px; max-height: calc(100% - 20px); }
-  .controls { bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .controls { bottom: calc(26px + env(safe-area-inset-bottom)); }
+  .sign { bottom: calc(6px + env(safe-area-inset-bottom)); }
   .controls button { height: 40px; padding: 0 14px; font-size: 13px; }
 }
 </style>
