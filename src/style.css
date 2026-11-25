@@ -2,7 +2,7 @@
   --ink: #161616;
   --muted: #5a6069;
   --accent: #1d3f9e; /* 中選會標誌的藍 */
-  --bg: #c8ccd1;
+  --bg: #e6e6e6; /* 跟 Day 27 的底色一樣 */
   --card: rgba(242, 242, 242, 0.92);
   --line: rgba(22, 22, 22, 0.12);
   font-family: Overpass, 'Noto Sans TC', system-ui, sans-serif;

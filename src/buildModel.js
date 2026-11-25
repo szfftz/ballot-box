@@ -28,7 +28,7 @@ async function fitSign(map, ballots) {
   let ll = [...GROUND_TEXT.center]
   for (let it = 0; it < 12; it++) {
     const bx = ballots.signBox()
-    if (!bx) return
+    if (!bx) return ll
     const dx = tx - (bx.x0 + bx.x1) / 2, dy = ty - bx.y1
     if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) break
     const sp = map.project(ll), n = map.unproject([sp.x + dx, sp.y + dy])
@@ -36,6 +36,7 @@ async function fitSign(map, ballots) {
     ballots.moveSign(ll)
     await frame()
   }
+  return ll
 }
 
 const b64 = (buf) => {
@@ -68,7 +69,7 @@ export async function buildModel(onState = () => {}) {
   const ballots = ballotLayer(data.map(([lon, lat], id) => ({ id, lon, lat })), saved, 270)
   map.addLayer(ballots)
   await ballots.finish()
-  await fitSign(map, ballots)
+  const sign = (await fitSign(map, ballots)).map((v) => +v.toFixed(5)) // 網頁的 3D 也放在這裡（meta.json）
   onState('做 AR 模型中…')
   await new Promise((r) => setTimeout(r, 1500)) // 等圈票處、排隊小人載好（字型、貼圖）
   // 模型轉到 Day 27 的視角方向朝 +z（AR 會把 +z 朝著人放）：視角從方位 (360 − bearing)° 看過來 → 轉 −那麼多
@@ -79,7 +80,7 @@ export async function buildModel(onState = () => {}) {
   const mpp = (40075016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** VIEW_3D.zoom)
   const dist = ((0.5 * VIEW_3D.frameH) / Math.tan((36.87 / 2) * (Math.PI / 180))) * mpp * xf.k
   const [x, y] = ballots.toLocal(...VIEW_3D.center) // 場景（x 東、y 北）→ 模型（x 東、y 上、z 南）
-  const meta = { box, dist: +dist.toFixed(4), target: [x * xf.k + xf.ox, xf.oy, -y * xf.k + xf.oz].map((v) => +v.toFixed(4)) }
+  const meta = { sign, box, dist: +dist.toFixed(4), target: [x * xf.k + xf.ox, xf.oy, -y * xf.k + xf.oz].map((v) => +v.toFixed(4)) }
   map.remove()
   el.remove()
   return { glb: b64(glb), usdz: b64(usdz), meta }

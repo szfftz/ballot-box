@@ -92,7 +92,7 @@ function shadowSheet(scene, skip) {
 //   model-viewer 就照 3D 的明暗畫（箱子朝太陽的面亮、背光的面暗），不會被它自己的環境光打平
 // 模型座標 y 朝上（場景 z 朝上轉過來：場景 (x, y, z) → 模型 (x, z, −y)）
 // BRIGHT：整體再亮一點（使用者要的；天光、太陽一起乘，面跟面的明暗比例不變）
-const BRIGHT = 1.2
+const BRIGHT = 1 // 跟 Day 27 一樣，不另外調亮
 const SKY = new THREE.Color('#ffffff'), GROUND = new THREE.Color('#5a5a66'), LIGHT = (1.6 / Math.PI) * BRIGHT
 const SUN0 = new THREE.Vector3(BALLOT.sun[0], BALLOT.sun[2], -BALLOT.sun[1]).normalize()
 let SUN = SUN0.clone() // 模型繞 y 轉過（opts.rotY）就跟著轉

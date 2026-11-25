@@ -1,9 +1,11 @@
 <template>
-  <!-- Lining Up for Democracy 為民主排隊（AR）：從 K30DayMapChallenge-2026 Day 27（New tool）的 AR 模式獨立出來
-       模型是事先做好的靜態檔（public/model/：npm run build:ar），用 Google model-viewer 顯示、放到 AR
-       /?build：開發用，現場用 3D 場景做模型（src/buildModel.js），給 scripts/export-ar.mjs 存檔 -->
+  <!-- Lining Up for Democracy 為民主排隊（AR）：K30DayMapChallenge-2026 Day 27（New tool）獨立出來的網站
+       畫面＝Day 27 的 3D 本身（MapLibre 地圖＋src/scene/ballotLayer.js，同一份程式：光、影子、地面、天空都一樣）
+       AR＝事先做好的靜態模型（public/model/：npm run build:ar），按鈕交給手機的 AR（Android Scene Viewer、iPhone Quick Look）
+       /?build：開發用，現場做 AR 模型（src/buildModel.js），給 scripts/export-ar.mjs 存檔 -->
   <div class="page">
-    <div ref="arBox" class="ar-box">
+    <div class="ar-box">
+      <div ref="mapEl" class="map"></div>
       <p v-if="state" class="ar-state"><span class="spin"></span>{{ state }}</p>
     </div>
 
@@ -13,7 +15,7 @@
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.5h4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         回到預設
       </button>
-      <button v-if="canAr" class="ar-btn" @click="mv.activateAR()">放到你面前看（AR）</button>
+      <button v-if="canAr" class="ar-btn" @click="openAr">放到你面前看（AR）</button>
     </div>
 
     <section class="card" :class="{ open }">
@@ -42,123 +44,111 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { VIEW_3D } from './view.js'
 
 const BASE = import.meta.env.BASE_URL
 const BUILD = new URLSearchParams(location.search).has('build')
 
-const arBox = ref(null)
-const state = ref('載入模型…')
+const mapEl = ref(null)
+const state = ref('載入中…')
 const qrSvg = ref('')
 const open = ref(false)
 const ready = ref(false)
 const canAr = ref(false)
-const mv = shallowRef(null)
-let moved = false, blobs = [], meta = null
+let map = null, mv = null, moved = false, PTS = [], meta = null
 
 const loadScript = (src, attrs = {}) => new Promise((resolve, reject) => {
   if (document.querySelector(`script[src="${src}"]`)) return resolve()
   document.head.appendChild(Object.assign(document.createElement('script'), { src, ...attrs, onload: resolve, onerror: reject }))
 })
 
-// 預設視角：方位、傾斜照 Day 27 的 3D（從東南東斜看、傾斜 60°），距離 auto＝model-viewer 照畫面大小退到整個模型都看得到
-const FOV = '36.87deg'
-// 模型已經轉成 Day 27 的視角方向朝 +z（src/buildModel.js 的 rotY），所以方位是 0°：跟 AR 打開時人看的方向一樣
-const ORBIT = `0deg ${VIEW_3D.pitch}deg auto`
-// 縮放範圍：最近 5 公分；最遠＝看得到全部的距離 × 1.4（不要拉到模型變成一個點）；最低 85°，不能從地底往上看
-const MIN_ORBIT = 'auto 0deg 0.05m'
-let fullR = 0 // 看得到全部的距離
-
-async function show(glbUrl, usdzUrl) {
-  await loadScript('https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js', { type: 'module' })
-  await customElements.whenDefined('model-viewer')
-  const el = document.createElement('model-viewer')
-  for (const [k, v] of Object.entries({ ar: '', 'ar-modes': 'webxr scene-viewer quick-look', 'ar-scale': 'auto', 'ar-placement': 'floor', 'camera-controls': '', 'shadow-intensity': '0', 'environment-image': 'neutral', 'tone-mapping': 'none', 'camera-orbit': ORBIT, 'camera-target': 'auto auto auto', 'field-of-view': FOV, 'min-camera-orbit': MIN_ORBIT, 'touch-action': 'none', 'interaction-prompt': 'none', exposure: '1', alt: '2026 投開票所投票箱 AR 模型', src: glbUrl, ...(usdzUrl ? { 'ios-src': usdzUrl } : {}) })) el.setAttribute(k, v)
-  // 不用 model-viewer 自己的 AR 按鈕：放一個藏起來的佔位，按鈕改放在底下那一排（跟「回到預設」並排）
-  el.appendChild(Object.assign(document.createElement('span'), { slot: 'ar-button', hidden: true }))
-  // 使用者自己轉過、縮放過就記下來（轉手機方向時不要把他的視角蓋掉）
-  el.addEventListener('camera-change', (e) => { if (e.detail?.source === 'user-interaction') moved = true })
-  el.addEventListener('load', async () => {
-    canAr.value = el.canActivateAR
-    state.value = ''
-    await resetView()
-  })
-  el.addEventListener('error', () => { state.value = '模型載入失敗，請重新整理' })
-  arBox.value.appendChild(el)
-  mv.value = el
-  ready.value = true
+// 預設視角：方位、傾斜跟 Day 27 一樣（299°、60°）；中心、縮放照畫面大小算，讓全部（投票箱、三排圈票處、排隊、告示牌）
+//   剛好放進畫面、上下左右置中（扣掉上面的說明卡、底下的按鈕）
+function pads() {
+  const W = mapEl.value.clientWidth, H = mapEl.value.clientHeight
+  const card = document.querySelector('.card')?.getBoundingClientRect()
+  const box = mapEl.value.getBoundingClientRect()
+  // 說明卡蓋在地圖上面（手機：卡片橫跨地圖）才讓出上面；電腦的卡片在地圖左邊，不用
+  const overlapTop = card && card.right > box.left + 10 && card.left < box.right - 10 && card.width > box.width * 0.6 ? Math.max(0, card.bottom - box.top) : 0
+  return { W, H, t: overlapTop + 16, b: 84, l: 16, r: 16 }
 }
-
-// 回到預設視角：值跟屬性一樣時 model-viewer 不會動，先改成別的、等它更新完再設回來（會平滑轉回去）
-// 看的中心：auto 是包圍盒的中心，斜著看（60°）近的那半邊比較大，模型在畫面上會偏下
-//   把包圍盒 8 個角照預設鏡頭投影到畫面上，移動看的中心（地面上前後、左右），讓上下、左右的範圍剛好置中
-function centerTarget(el, r) {
-  // 範圍用 meta.json 的 box（看得到的東西，不含地上影子透明的四周）；沒有就用 model-viewer 的包圍盒
-  const b = meta?.box
-  const c = b ? { x: (b[0] + b[3]) / 2, y: (b[1] + b[4]) / 2, z: (b[2] + b[5]) / 2 } : el.getBoundingBoxCenter()
-  const d = b ? { x: b[3] - b[0], y: b[4] - b[1], z: b[5] - b[2] } : el.getDimensions()
-  const phi = (VIEW_3D.pitch * Math.PI) / 180, cp = Math.cos(phi), sp = Math.sin(phi)
-  // 方位 0°：鏡頭在看的中心的 +z 那邊、高 r·cosφ；往前＝(0, −cosφ, −sinφ)、往上＝(0, sinφ, −cosφ)、往右＝+x
-  const corners = []
-  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) corners.push([c.x + (x * d.x) / 2, c.y + (y * d.y) / 2, c.z + (z * d.z) / 2])
-  const mid = (tx, tz) => {
-    const cam = [tx, c.y + r * cp, tz + r * sp]
+function fitView() {
+  const { W, H, t, b, l, r } = pads()
+  map.jumpTo({ center: VIEW_3D.center, zoom: VIEW_3D.zoom, bearing: VIEW_3D.bearing, pitch: VIEW_3D.pitch })
+  for (let i = 0; i < 8; i++) {
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
-    for (const [px, py, pz] of corners) {
-      const dx = px - cam[0], dy = py - cam[1], dz = pz - cam[2]
-      const f = -dy * cp - dz * sp, sx = dx / f, sy = (dy * sp - dz * cp) / f
-      x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy)
+    for (const p of PTS) {
+      const q = map.project(p)
+      x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y)
     }
-    return [(x0 + x1) / 2, (y0 + y1) / 2]
+    y0 -= (y1 - y0) * 0.06 // 人、圈票處是立起來的（約 15 km 高），上面多留一點
+    const aw = W - l - r, ah = H - t - b
+    const k = Math.min(aw / (x1 - x0), ah / (y1 - y0))
+    const tx = l + aw / 2, ty = t + ah / 2, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
+    const c = map.unproject([W / 2 + (cx - tx), H / 2 + (cy - ty)])
+    map.jumpTo({ center: c, zoom: map.getZoom() + Math.max(-2, Math.min(2, Math.log2(k))) }) // 一次最多縮放 2 級，不會跑掉
   }
-  // 二分法：前後（z）讓上下置中，左右（x）讓左右置中
-  const solve = (lo, hi, f) => {
-    const flo = f(lo)
-    for (let i = 0; i < 40; i++) {
-      const m = (lo + hi) / 2, fm = f(m)
-      if (Math.sign(fm) === Math.sign(flo)) lo = m
-      else hi = m
-    }
-    return (lo + hi) / 2
-  }
-  const span = Math.max(d.x, d.z)
-  const tz = solve(c.z - span, c.z + span, (z) => mid(c.x, z)[1])
-  const tx = solve(c.x - span, c.x + span, (x) => mid(x, tz)[0])
-  return `${tx.toFixed(4)}m ${c.y.toFixed(4)}m ${tz.toFixed(4)}m`
-}
-
-async function resetView() {
-  const el = mv.value
-  if (!el) return
   moved = false
-  el.maxCameraOrbit = 'auto 85deg 100m' // 先放開（畫面變大時看得到全部的距離會變；auto 會被限制得更近）
-  el.cameraOrbit = '0deg 0deg 1m'
-  el.cameraTarget = '0m 0m 0m'
-  await el.updateComplete
-  el.cameraOrbit = ORBIT
-  el.cameraTarget = 'auto auto auto'
-  el.fieldOfView = FOV
-  await el.updateComplete
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))) // 等 model-viewer 算出 auto 的距離
-  el.jumpCameraToGoal() // 直接到預設視角，再照它的距離設最遠範圍
-  await new Promise((r) => requestAnimationFrame(r))
-  // auto 是照包圍球退的（保守，平平的模型四周留很多白）：橫的畫面再靠近一點，直的畫面寬度剛好，不動
-  const box = arBox.value.getBoundingClientRect(), fit = box.width >= box.height ? 0.78 : 1
-  fullR = el.getCameraOrbit().radius * fit
-  el.cameraOrbit = ORBIT.replace('auto', `${fullR.toFixed(3)}m`)
-  el.cameraTarget = centerTarget(el, fullR)
-  await el.updateComplete
-  el.jumpCameraToGoal()
-  el.maxCameraOrbit = `auto 85deg ${(fullR * 1.4).toFixed(3)}m`
 }
+function resetView() { if (map) fitView() }
 
-// 視窗大小、手機方向變了：沒動過視角就照新的寬高比重算預設視角
+// 視窗大小、手機方向變了：沒動過視角就重新放進畫面
 let rt = 0
 function onResize() {
   clearTimeout(rt)
-  rt = setTimeout(() => { if (mv.value && !moved) resetView() }, 200)
+  rt = setTimeout(() => { if (map && !moved) fitView() }, 200)
 }
+
+async function startMap() {
+  const [maplibregl, { ballotLayer, decodeBoxes }, { GROUND, BILLBOARD, BILLBOARD2, BILLBOARD3 }, QUEUE, polling, settled] = await Promise.all([
+    import('maplibre-gl'), import('./scene/ballotLayer.js'), import('./scene/floorDecal.js'), import('./scene/data/queue-path.json'),
+    import('./scene/data/polling.json?url'), import('./scene/data/ballots-settled.json?url'), import('maplibre-gl/dist/maplibre-gl.css'), import('./lib/maplibre-worker.js'),
+  ])
+  const [data, saved] = await Promise.all([
+    fetch(polling.default).then((r) => r.json()),
+    fetch(settled.default).then((r) => r.json()).then((j) => decodeBoxes(j.boxes)),
+  ])
+  // 地圖跟 Day 27 一樣：不放底圖，只有淺色底（#e6e6e6）；傾斜最多 85°
+  map = new maplibregl.Map({
+    container: mapEl.value,
+    style: { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#e6e6e6' } }] },
+    center: VIEW_3D.center, zoom: VIEW_3D.zoom, bearing: VIEW_3D.bearing, pitch: VIEW_3D.pitch,
+    maxPitch: 85,
+    attributionControl: { compact: true, customAttribution: '投開票所：中選會；地理編碼：Esri' },
+  })
+  await new Promise((r) => map.once('load', r))
+  const ballots = ballotLayer(data.map(([lon, lat], id) => ({ id, lon, lat })), saved, 270)
+  map.addLayer(ballots)
+  // 天空（傾斜大時地平線以上）：跟 Day 27 一樣，地平線接地面最遠的顏色，往上變亮
+  map.setSky?.({ 'sky-color': GROUND.sky, 'horizon-color': GROUND.far, 'fog-color': GROUND.far, 'sky-horizon-blend': 1, 'horizon-fog-blend': 1, 'fog-ground-blend': 1, 'atmosphere-blend': 0 })
+  // 告示牌放在做 AR 模型時算好的位置（Day 27 對齊 IG 框的那個位置），畫面、AR 一樣
+  await ballots.signReady
+  if (meta?.sign) ballots.moveSign(meta.sign)
+  // 要放進畫面的範圍：所有投票箱、排隊的一圈、三排圈票處、告示牌
+  PTS = [...data.map(([lon, lat]) => [lon, lat]), ...QUEUE.default[0], ...[BILLBOARD, BILLBOARD2, BILLBOARD3].map((b) => b.lonlat), ...(meta?.sign ? [meta.sign] : [])]
+  fitView()
+  map.on("movestart", (e) => { if (e.originalEvent) moved = true })
+  ready.value = true
+  state.value = ''
+}
+
+// AR：一個看不見的 model-viewer，只拿來把模型交給手機的 AR（不在網頁上畫，不會先下載模型）
+//   Android 用 Scene Viewer、iPhone 用 Quick Look（都要真的網址）；都不行才用 WebXR
+async function setupAr() {
+  await loadScript('https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js', { type: 'module' })
+  await customElements.whenDefined('model-viewer')
+  const abs = (f) => new URL(`${BASE}model/${f}?v=${meta.v}`, location.href).href
+  mv = document.createElement('model-viewer')
+  for (const [k, v] of Object.entries({ ar: '', 'ar-modes': 'scene-viewer quick-look webxr', 'ar-scale': 'auto', 'ar-placement': 'floor', loading: 'lazy', reveal: 'manual', alt: '2026 投開票所投票箱 AR 模型', src: abs('ballot-box.glb'), 'ios-src': abs('ballot-box.usdz') })) mv.setAttribute(k, v)
+  mv.appendChild(Object.assign(document.createElement('span'), { slot: 'ar-button', hidden: true }))
+  mv.className = 'ar-hidden'
+  document.body.appendChild(mv)
+  await mv.updateComplete
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+  canAr.value = mv.canActivateAR
+}
+function openAr() { mv?.activateAR() }
 
 async function makeQr() {
   try {
@@ -172,32 +162,30 @@ async function makeQr() {
 
 async function start() {
   if (BUILD) {
-    // 開發用：現場做模型，結果放在 window.__arFiles 給 scripts/export-ar.mjs 存檔
+    // 開發用：現場做 AR 模型，結果放在 window.__arFiles 給 scripts/export-ar.mjs 存檔
     const { buildModel } = await import('./buildModel.js')
-    const files = await buildModel((t) => (state.value = t))
-    window.__arFiles = files
-    meta = files.meta
-    const url = (b, type) => { const u = URL.createObjectURL(new Blob([Uint8Array.from(atob(b), (ch) => ch.charCodeAt(0))], { type })); blobs.push(u); return u }
-    return show(url(files.glb, 'model/gltf-binary'), url(files.usdz, 'model/vnd.usdz+zip'))
+    window.__arFiles = await buildModel((t) => (state.value = t))
+    state.value = '模型做好了'
+    return
   }
   meta = await (await fetch(`${BASE}model/meta.json`)).json()
-  // 絕對網址：Android 的 Scene Viewer、iPhone 的 Quick Look 都要真的網址
-  const abs = (f) => new URL(`${BASE}model/${f}?v=${meta.v}`, location.href).href
-  await show(abs('ballot-box.glb'), abs('ballot-box.usdz'))
+  setupAr().catch(() => {})
+  await startMap()
 }
 
 onMounted(() => {
   addEventListener('resize', onResize)
-  start().catch((e) => { console.error(e); state.value = '模型載入失敗，請重新整理' })
+  start().catch((e) => { console.error(e); state.value = '載入失敗，請重新整理' })
   if (matchMedia('(hover: hover) and (pointer: fine)').matches) makeQr() // 電腦才放 QR code
 })
-onBeforeUnmount(() => { removeEventListener('resize', onResize); blobs.forEach((u) => URL.revokeObjectURL(u)) })
+onBeforeUnmount(() => { removeEventListener('resize', onResize); map?.remove(); mv?.remove() })
 </script>
 
 <style scoped>
 .page { position: fixed; inset: 0; }
-.ar-box { position: absolute; inset: 0; z-index: 1; background: var(--bg); } /* 比 3D 的地面深一點，白箱子才看得清楚 */
-.ar-box :deep(model-viewer) { width: 100%; height: 100%; --poster-color: transparent; }
+.ar-box { position: absolute; inset: 0; z-index: 1; background: #e6e6e6; } /* 跟 Day 27 的底色一樣 */
+.map { position: absolute; inset: 0; }
+.ar-box :deep(.maplibregl-ctrl-bottom-right) { bottom: 72px; } /* 資料來源標註不要被按鈕蓋住 */
 .controls { position: absolute; z-index: 3; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; } /* 兩個按鈕一樣寬（照長的那個） */
 .controls button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; padding: 0 18px; border: 0; border-radius: 999px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .ar-btn { background: var(--ink); color: #f2f2f2; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2); }
@@ -230,7 +218,7 @@ h1 { margin: 2px 0 4px; font-size: 22px; font-weight: 900; line-height: 1.25; }
    平板（≤1100）：卡片窄一點
    手機直立（≤700 寬）、手機橫放（≤500 高）：說明收起來只留標題（點「說明」展開）、不放 QR code */
 /* 電腦、平板：模型只放在卡片右邊（不被卡片蓋住）；底色跟模型一樣，看不出分界 */
-.page { background: var(--bg); }
+.page { background: #e6e6e6; }
 @media (min-width: 701px) and (min-height: 501px) and (orientation: landscape) {
   .ar-box { left: 372px; }
   .controls { left: calc(50% + 186px); }
@@ -264,4 +252,9 @@ h1 { margin: 2px 0 4px; font-size: 22px; font-weight: 900; line-height: 1.25; }
   .controls { bottom: calc(12px + env(safe-area-inset-bottom)); }
   .controls button { height: 40px; padding: 0 14px; font-size: 13px; }
 }
+</style>
+
+<style>
+/* AR 用的 model-viewer 看不見，只拿來開手機的 AR */
+.ar-hidden { position: fixed; left: -10px; top: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 </style>
