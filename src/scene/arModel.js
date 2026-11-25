@@ -91,7 +91,9 @@ function shadowSheet(scene, skip) {
 //   three.js 的 Lambert：顏色 ×（半球光 ＋ 太陽 × max(0, 法線·太陽)）÷ π；材質改成不受光（glTF 的 KHR_materials_unlit），
 //   model-viewer 就照 3D 的明暗畫（箱子朝太陽的面亮、背光的面暗），不會被它自己的環境光打平
 // 模型座標 y 朝上（場景 z 朝上轉過來：場景 (x, y, z) → 模型 (x, z, −y)）
-const SKY = new THREE.Color('#ffffff'), GROUND = new THREE.Color('#5a5a66'), LIGHT = 1.6 / Math.PI
+// BRIGHT：整體再亮一點（使用者要的；天光、太陽一起乘，面跟面的明暗比例不變）
+const BRIGHT = 1.2
+const SKY = new THREE.Color('#ffffff'), GROUND = new THREE.Color('#5a5a66'), LIGHT = (1.6 / Math.PI) * BRIGHT
 const SUN0 = new THREE.Vector3(BALLOT.sun[0], BALLOT.sun[2], -BALLOT.sun[1]).normalize()
 let SUN = SUN0.clone() // 模型繞 y 轉過（opts.rotY）就跟著轉
 // 半球光的「天」在哪個方向：three.js 的 HemisphereLight 預設從 +y 照，Day 27 的場景是 z 朝上，所以 +y 是「北」：
@@ -214,7 +216,11 @@ export async function buildArGlb(layer, opts = {}) {
     const usdz = opts.usdz ? fixUsdz(await new USDZExporter().parseAsync(model)) : null
     bakeLight(model)
     const glb = await new GLTFExporter().parseAsync(model, { binary: true })
-    return { blob: new Blob([glb], { type: 'model/gltf-binary' }), glb, usdz, xf }
+    // 看得到的東西的範圍（不含地上那片影子：它的貼圖四周是透明的，範圍比看得到的大）：網頁把模型在畫面上置中用
+    const vis = new THREE.Box3()
+    model.traverse((o) => { if (o.isMesh && !o.material.map?.userData?.arFull) vis.expandByObject(o) })
+    const box = [...vis.min.toArray(), ...vis.max.toArray()].map((v) => +v.toFixed(4))
+    return { blob: new Blob([glb], { type: 'model/gltf-binary' }), glb, usdz, xf, box }
   } finally {
     scene.rotation.x = rot
     scene.updateMatrixWorld(true)

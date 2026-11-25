@@ -73,13 +73,13 @@ export async function buildModel(onState = () => {}) {
   await new Promise((r) => setTimeout(r, 1500)) // 等圈票處、排隊小人載好（字型、貼圖）
   // 模型轉到 Day 27 的視角方向朝 +z（AR 會把 +z 朝著人放）：視角從方位 (360 − bearing)° 看過來 → 轉 −那麼多
   const rotY = -(((360 - VIEW_3D.bearing) % 360) * Math.PI) / 180
-  const { glb, usdz, xf } = await buildArGlb(ballots, { usdz: true, rotY })
+  const { glb, usdz, xf, box } = await buildArGlb(ballots, { usdz: true, rotY })
   // AR 預設視角＝3D 預設視角：距離照縮放換算（畫面比例 1.6 時），看的中心換成模型座標
   const lat = VIEW_3D.center[1]
   const mpp = (40075016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** VIEW_3D.zoom)
   const dist = ((0.5 * VIEW_3D.frameH) / Math.tan((36.87 / 2) * (Math.PI / 180))) * mpp * xf.k
   const [x, y] = ballots.toLocal(...VIEW_3D.center) // 場景（x 東、y 北）→ 模型（x 東、y 上、z 南）
-  const meta = { dist: +dist.toFixed(4), target: [x * xf.k + xf.ox, xf.oy, -y * xf.k + xf.oz].map((v) => +v.toFixed(4)) }
+  const meta = { box, dist: +dist.toFixed(4), target: [x * xf.k + xf.ox, xf.oy, -y * xf.k + xf.oz].map((v) => +v.toFixed(4)) }
   map.remove()
   el.remove()
   return { glb: b64(glb), usdz: b64(usdz), meta }

@@ -55,7 +55,7 @@ const open = ref(false)
 const ready = ref(false)
 const canAr = ref(false)
 const mv = shallowRef(null)
-let moved = false, blobs = []
+let moved = false, blobs = [], meta = null
 
 const loadScript = (src, attrs = {}) => new Promise((resolve, reject) => {
   if (document.querySelector(`script[src="${src}"]`)) return resolve()
@@ -91,6 +91,43 @@ async function show(glbUrl, usdzUrl) {
 }
 
 // 回到預設視角：值跟屬性一樣時 model-viewer 不會動，先改成別的、等它更新完再設回來（會平滑轉回去）
+// 看的中心：auto 是包圍盒的中心，斜著看（60°）近的那半邊比較大，模型在畫面上會偏下
+//   把包圍盒 8 個角照預設鏡頭投影到畫面上，移動看的中心（地面上前後、左右），讓上下、左右的範圍剛好置中
+function centerTarget(el, r) {
+  // 範圍用 meta.json 的 box（看得到的東西，不含地上影子透明的四周）；沒有就用 model-viewer 的包圍盒
+  const b = meta?.box
+  const c = b ? { x: (b[0] + b[3]) / 2, y: (b[1] + b[4]) / 2, z: (b[2] + b[5]) / 2 } : el.getBoundingBoxCenter()
+  const d = b ? { x: b[3] - b[0], y: b[4] - b[1], z: b[5] - b[2] } : el.getDimensions()
+  const phi = (VIEW_3D.pitch * Math.PI) / 180, cp = Math.cos(phi), sp = Math.sin(phi)
+  // 方位 0°：鏡頭在看的中心的 +z 那邊、高 r·cosφ；往前＝(0, −cosφ, −sinφ)、往上＝(0, sinφ, −cosφ)、往右＝+x
+  const corners = []
+  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) corners.push([c.x + (x * d.x) / 2, c.y + (y * d.y) / 2, c.z + (z * d.z) / 2])
+  const mid = (tx, tz) => {
+    const cam = [tx, c.y + r * cp, tz + r * sp]
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+    for (const [px, py, pz] of corners) {
+      const dx = px - cam[0], dy = py - cam[1], dz = pz - cam[2]
+      const f = -dy * cp - dz * sp, sx = dx / f, sy = (dy * sp - dz * cp) / f
+      x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy)
+    }
+    return [(x0 + x1) / 2, (y0 + y1) / 2]
+  }
+  // 二分法：前後（z）讓上下置中，左右（x）讓左右置中
+  const solve = (lo, hi, f) => {
+    const flo = f(lo)
+    for (let i = 0; i < 40; i++) {
+      const m = (lo + hi) / 2, fm = f(m)
+      if (Math.sign(fm) === Math.sign(flo)) lo = m
+      else hi = m
+    }
+    return (lo + hi) / 2
+  }
+  const span = Math.max(d.x, d.z)
+  const tz = solve(c.z - span, c.z + span, (z) => mid(c.x, z)[1])
+  const tx = solve(c.x - span, c.x + span, (x) => mid(x, tz)[0])
+  return `${tx.toFixed(4)}m ${c.y.toFixed(4)}m ${tz.toFixed(4)}m`
+}
+
 async function resetView() {
   const el = mv.value
   if (!el) return
@@ -110,6 +147,7 @@ async function resetView() {
   const box = arBox.value.getBoundingClientRect(), fit = box.width >= box.height ? 0.78 : 1
   fullR = el.getCameraOrbit().radius * fit
   el.cameraOrbit = ORBIT.replace('auto', `${fullR.toFixed(3)}m`)
+  el.cameraTarget = centerTarget(el, fullR)
   await el.updateComplete
   el.jumpCameraToGoal()
   el.maxCameraOrbit = `auto 85deg ${(fullR * 1.4).toFixed(3)}m`
@@ -138,10 +176,11 @@ async function start() {
     const { buildModel } = await import('./buildModel.js')
     const files = await buildModel((t) => (state.value = t))
     window.__arFiles = files
+    meta = files.meta
     const url = (b, type) => { const u = URL.createObjectURL(new Blob([Uint8Array.from(atob(b), (ch) => ch.charCodeAt(0))], { type })); blobs.push(u); return u }
     return show(url(files.glb, 'model/gltf-binary'), url(files.usdz, 'model/vnd.usdz+zip'))
   }
-  const meta = await (await fetch(`${BASE}model/meta.json`)).json()
+  meta = await (await fetch(`${BASE}model/meta.json`)).json()
   // 絕對網址：Android 的 Scene Viewer、iPhone 的 Quick Look 都要真的網址
   const abs = (f) => new URL(`${BASE}model/${f}?v=${meta.v}`, location.href).href
   await show(abs('ballot-box.glb'), abs('ballot-box.usdz'))
