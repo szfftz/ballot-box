@@ -25,19 +25,17 @@
 
       <!-- 說明：跟 K30DayMapChallenge-2026 Day 27 主頁的「說明」一樣（src/data/about.js、share.js）：中文全部在上面，英文全部在下面 -->
       <div class="body">
-        <p class="cap-title">30DayMapChallenge<span class="dot">·</span>Day 27<span class="dot">·</span>New tool</p>
         <p class="about">2026年11月28日是台灣的地方大選，全國共設有1萬8,244個投票所，由於投票所不能離每個人住的地方太遠，所以會平均地遍布全台。如果把每個投票地點當成一個投票箱堆在一起，堆越高的地方就是越多台灣人住的地方。</p>
         <p class="about-src">資料來源：中央選舉委員會、Esri</p>
-        <p class="tags"><span v-for="t in TAGS_ZH" :key="t">{{ t }}</span></p>
         <p class="about-en">Taiwan votes on November 28, 2026. There are 18,244 polling places. They can't be far from people's homes, so they are all over Taiwan. Make one ballot box for each place and pile them up. Higher piles mean more people live there.</p>
         <p class="about-src">Data: Central Election Commission (CEC); Esri</p>
-        <p class="tags"><span v-for="t in TAGS" :key="t">{{ t }}</span></p>
       </div>
 
       <div v-if="qrSvg" class="qr-wrap">
         <div class="qr" v-html="qrSvg"></div>
-        <p>在電腦上看？用手機掃 QR code 打開，就能放到 AR</p>
+        <p>想用 AR 看？用手機相機掃這個 QR code，打開網頁後按「放到你面前看（AR）」，模型就會出現在你面前的地板上。</p>
       </div>
+      <p class="sign">szfftz</p>
     </section>
   </div>
 </template>
@@ -47,8 +45,6 @@ import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { VIEW_3D } from './view.js'
 
 const BASE = import.meta.env.BASE_URL
-const TAGS_ZH = ['#30天地圖挑戰', '#台灣', '#選舉', '#投票', '#投票匭']
-const TAGS = ['#30daymapchallenge', '#taiwan', '#election', '#vote', '#ballotbox']
 const BUILD = new URLSearchParams(location.search).has('build')
 
 const arBox = ref(null)
@@ -58,40 +54,34 @@ const open = ref(false)
 const ready = ref(false)
 const canAr = ref(false)
 const mv = shallowRef(null)
-let meta = null, moved = false, blobs = []
+let moved = false, blobs = []
 
 const loadScript = (src, attrs = {}) => new Promise((resolve, reject) => {
   if (document.querySelector(`script[src="${src}"]`)) return resolve()
   document.head.appendChild(Object.assign(document.createElement('script'), { src, ...attrs, onload: resolve, onerror: reject }))
 })
 
-// 預設視角：Day 27 的畫面是兩張 IG 並排（寬:高＝1.6），視角 36.87° 是上下的
-//   畫面比 1.6 窄（直立的手機、平板）時往後退一點，但最多退 1.4 倍（不要縮太遠，左右切掉一點沒關係）
-const ASPECT = 1.6, FOV = '36.87deg'
-const aspectNow = () => { const r = arBox.value?.getBoundingClientRect(); return r && r.height ? r.width / r.height : ASPECT }
-function camera() {
-  const fit = Math.min(1.4, Math.max(1, Math.sqrt(ASPECT / aspectNow()) * 0.75))
-  const dist = meta.dist * fit
-  return {
-    orbit: `${(360 - VIEW_3D.bearing) % 360}deg ${VIEW_3D.pitch}deg ${dist.toFixed(3)}m`,
-    target: meta.target.map((v) => `${v}m`).join(' '),
-    // 縮放範圍：最近 5 公分，最遠預設距離的 1.6 倍（不要拉到模型變成一個點）；最低 85°，不能從地底往上看
-    min: 'auto 0deg 0.05m',
-    max: `auto 85deg ${(dist * 1.6).toFixed(3)}m`,
-  }
-}
+// 預設視角：方位、傾斜照 Day 27 的 3D（從東南東斜看、傾斜 60°），距離 auto＝model-viewer 照畫面大小退到整個模型都看得到
+const FOV = '36.87deg'
+const ORBIT = `${(360 - VIEW_3D.bearing) % 360}deg ${VIEW_3D.pitch}deg auto`
+// 縮放範圍：最近 5 公分；最遠＝看得到全部的距離 × 1.4（不要拉到模型變成一個點）；最低 85°，不能從地底往上看
+const MIN_ORBIT = 'auto 0deg 0.05m'
+let fullR = 0 // 看得到全部的距離
 
 async function show(glbUrl, usdzUrl) {
   await loadScript('https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js', { type: 'module' })
   await customElements.whenDefined('model-viewer')
-  const c = camera()
   const el = document.createElement('model-viewer')
-  for (const [k, v] of Object.entries({ ar: '', 'ar-modes': 'webxr scene-viewer quick-look', 'ar-scale': 'auto', 'ar-placement': 'floor', 'camera-controls': '', 'shadow-intensity': '0', 'environment-image': 'neutral', 'tone-mapping': 'neutral', 'camera-orbit': c.orbit, 'camera-target': c.target, 'field-of-view': FOV, 'min-camera-orbit': c.min, 'max-camera-orbit': c.max, 'touch-action': 'none', 'interaction-prompt': 'none', exposure: '0.85', alt: '2026 投開票所投票箱 AR 模型', src: glbUrl, ...(usdzUrl ? { 'ios-src': usdzUrl } : {}) })) el.setAttribute(k, v)
+  for (const [k, v] of Object.entries({ ar: '', 'ar-modes': 'webxr scene-viewer quick-look', 'ar-scale': 'auto', 'ar-placement': 'floor', 'camera-controls': '', 'shadow-intensity': '0', 'environment-image': 'neutral', 'tone-mapping': 'none', 'camera-orbit': ORBIT, 'camera-target': 'auto auto auto', 'field-of-view': FOV, 'min-camera-orbit': MIN_ORBIT, 'touch-action': 'none', 'interaction-prompt': 'none', exposure: '1', alt: '2026 投開票所投票箱 AR 模型', src: glbUrl, ...(usdzUrl ? { 'ios-src': usdzUrl } : {}) })) el.setAttribute(k, v)
   // 不用 model-viewer 自己的 AR 按鈕：放一個藏起來的佔位，按鈕改放在底下那一排（跟「回到預設」並排）
   el.appendChild(Object.assign(document.createElement('span'), { slot: 'ar-button', hidden: true }))
   // 使用者自己轉過、縮放過就記下來（轉手機方向時不要把他的視角蓋掉）
   el.addEventListener('camera-change', (e) => { if (e.detail?.source === 'user-interaction') moved = true })
-  el.addEventListener('load', () => { canAr.value = el.canActivateAR; state.value = '' })
+  el.addEventListener('load', async () => {
+    canAr.value = el.canActivateAR
+    state.value = ''
+    await resetView()
+  })
   el.addEventListener('error', () => { state.value = '模型載入失敗，請重新整理' })
   arBox.value.appendChild(el)
   mv.value = el
@@ -101,16 +91,26 @@ async function show(glbUrl, usdzUrl) {
 // 回到預設視角：值跟屬性一樣時 model-viewer 不會動，先改成別的、等它更新完再設回來（會平滑轉回去）
 async function resetView() {
   const el = mv.value
-  if (!el || !meta) return
-  const c = camera()
+  if (!el) return
   moved = false
-  el.maxCameraOrbit = c.max
-  el.cameraOrbit = 'auto auto auto'
-  el.cameraTarget = 'auto auto auto'
+  el.maxCameraOrbit = 'auto 85deg 100m' // 先放開（畫面變大時看得到全部的距離會變；auto 會被限制得更近）
+  el.cameraOrbit = '0deg 0deg 1m'
+  el.cameraTarget = '0m 0m 0m'
   await el.updateComplete
-  el.cameraOrbit = c.orbit
-  el.cameraTarget = c.target
+  el.cameraOrbit = ORBIT
+  el.cameraTarget = 'auto auto auto'
   el.fieldOfView = FOV
+  await el.updateComplete
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))) // 等 model-viewer 算出 auto 的距離
+  el.jumpCameraToGoal() // 直接到預設視角，再照它的距離設最遠範圍
+  await new Promise((r) => requestAnimationFrame(r))
+  // auto 是照包圍球退的（保守，平平的模型四周留很多白）：橫的畫面再靠近一點，直的畫面寬度剛好，不動
+  const box = arBox.value.getBoundingClientRect(), fit = box.width >= box.height ? 0.78 : 1
+  fullR = el.getCameraOrbit().radius * fit
+  el.cameraOrbit = ORBIT.replace('auto', `${fullR.toFixed(3)}m`)
+  await el.updateComplete
+  el.jumpCameraToGoal()
+  el.maxCameraOrbit = `auto 85deg ${(fullR * 1.4).toFixed(3)}m`
 }
 
 // 視窗大小、手機方向變了：沒動過視角就照新的寬高比重算預設視角
@@ -136,11 +136,10 @@ async function start() {
     const { buildModel } = await import('./buildModel.js')
     const files = await buildModel((t) => (state.value = t))
     window.__arFiles = files
-    meta = files.meta
     const url = (b, type) => { const u = URL.createObjectURL(new Blob([Uint8Array.from(atob(b), (ch) => ch.charCodeAt(0))], { type })); blobs.push(u); return u }
     return show(url(files.glb, 'model/gltf-binary'), url(files.usdz, 'model/vnd.usdz+zip'))
   }
-  meta = await (await fetch(`${BASE}model/meta.json`)).json()
+  const meta = await (await fetch(`${BASE}model/meta.json`)).json()
   // 絕對網址：Android 的 Scene Viewer、iPhone 的 Quick Look 都要真的網址
   const abs = (f) => new URL(`${BASE}model/${f}?v=${meta.v}`, location.href).href
   await show(abs('ballot-box.glb'), abs('ballot-box.usdz'))
@@ -178,13 +177,10 @@ h1 { margin: 2px 0 4px; font-size: 22px; font-weight: 900; line-height: 1.25; }
 .title-zh { margin: 0; font-size: 15px; font-weight: 700; }
 .more { display: none; position: absolute; right: 0; top: 0; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: transparent; font-size: 12px; cursor: pointer; }
 .body { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-.cap-title { margin: 0 0 6px; font-family: Overpass, sans-serif; font-size: 13px; font-weight: 700; color: var(--accent); }
-.cap-title .dot { margin: 0 .45em; }
 .about { margin: 0; font-size: 13px; line-height: 1.7; }
 .about-src { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .about-en { margin: 14px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
-.tags { display: flex; flex-wrap: wrap; gap: 0 .6em; margin: 4px 0 0; color: var(--accent); font-size: 12px; line-height: 1.6; }
-.tags span { white-space: nowrap; }
+.sign { margin: 14px 0 0; text-align: center; font-family: Overpass, sans-serif; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .02em; }
 .qr-wrap { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); text-align: center; color: var(--muted); font-size: 12px; }
 .qr { width: 150px; margin: 0 auto 4px; padding: 6px; border-radius: 8px; background: #fff; }
 .qr :deep(svg) { display: block; width: 100%; height: auto; }
@@ -192,6 +188,16 @@ h1 { margin: 2px 0 4px; font-size: 22px; font-weight: 900; line-height: 1.25; }
 /* ── RWD ──
    平板（≤1100）：卡片窄一點
    手機直立（≤700 寬）、手機橫放（≤500 高）：說明收起來只留標題（點「說明」展開）、不放 QR code */
+/* 電腦、平板：模型只放在卡片右邊（不被卡片蓋住）；底色跟模型一樣，看不出分界 */
+.page { background: var(--bg); }
+@media (min-width: 701px) and (min-height: 501px) and (orientation: landscape) {
+  .ar-box { left: 372px; }
+  .controls { left: calc(50% + 186px); }
+}
+@media (min-width: 701px) and (max-width: 1100px) and (min-height: 501px) and (orientation: landscape) {
+  .ar-box { left: 332px; }
+  .controls { left: calc(50% + 166px); }
+}
 @media (max-width: 1100px) {
   .card { width: 300px; }
   h1 { font-size: 20px; }
@@ -202,7 +208,7 @@ h1 { margin: 2px 0 4px; font-size: 22px; font-weight: 900; line-height: 1.25; }
   h1 { font-size: 18px; }
   .title-zh { font-size: 14px; }
   .more { display: block; }
-  .card:not(.open) .body { display: none; }
+  .card:not(.open) .body, .card:not(.open) .sign { display: none; }
   .qr-wrap { display: none; }
 }
 /* 手機直立：卡片左右撐滿；底下兩個按鈕小一點才並排得下 */

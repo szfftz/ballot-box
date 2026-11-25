@@ -41,8 +41,8 @@ function shadowSheet(scene, skip) {
     if (!o.geometry.boundingBox) o.geometry.computeBoundingBox()
     eachMatrix(o, (mw) => box.union(bb.copy(o.geometry.boundingBox).applyMatrix4(m.multiplyMatrices(flat, mw))))
   }
-  // 最長邊 2048 px（含邊界）：手機 GPU 的貼圖上限多半是 4096，超過 Android Scene Viewer 整個模型都不顯示；桌上 1 公尺約 0.5 公釐一格，夠細
-  const S = 2044, x0 = box.min.x, y1 = box.max.y, k = S / Math.max(box.max.x - x0, y1 - box.min.y)
+  // 跟 Day 27 一樣細（4096）；含兩邊各 1 px 的邊界最長邊剛好 4096：手機 GPU 的貼圖上限多半是 4096，超過 Android Scene Viewer 整個模型都不顯示
+  const S = 4094, x0 = box.min.x, y1 = box.max.y, k = S / Math.max(box.max.x - x0, y1 - box.min.y)
   const W = Math.ceil((box.max.x - x0) * k) + 2, H = Math.ceil((y1 - box.min.y) * k) + 2
   const c = document.createElement('canvas')
   c.width = W
@@ -87,6 +87,33 @@ function shadowSheet(scene, skip) {
   return plane
 }
 
+// 3D 的打光烘進頂點顏色：跟 ballotLayer.js 一樣的半球光（天 #ffffff、地 #5a5a66、1.6）＋太陽平行光（1.6，投票日上午 8 點）
+//   three.js 的 Lambert：顏色 ×（半球光 ＋ 太陽 × max(0, 法線·太陽)）÷ π；材質改成不受光（glTF 的 KHR_materials_unlit），
+//   model-viewer 就照 3D 的明暗畫（箱子朝太陽的面亮、背光的面暗），不會被它自己的環境光打平
+// 模型座標 y 朝上（場景 z 朝上轉過來：場景 (x, y, z) → 模型 (x, z, −y)）
+const SKY = new THREE.Color('#ffffff'), GROUND = new THREE.Color('#5a5a66'), LIGHT = 1.6 / Math.PI
+const SUN = new THREE.Vector3(BALLOT.sun[0], BALLOT.sun[2], -BALLOT.sun[1]).normalize()
+function bakeLight(model) {
+  const n = new THREE.Vector3(), c = new THREE.Color()
+  model.traverse((o) => {
+    if (!o.isMesh) return
+    const m = o.material
+    if (m.map?.userData?.arFull) return // 地上的影子：本來就不受光
+    const g = o.geometry, nrm = g.attributes.normal, N = g.attributes.position.count
+    const old = m.vertexColors ? g.attributes.color : null
+    const col = new Float32Array(N * 3)
+    for (let i = 0; i < N; i++) {
+      n.fromBufferAttribute(nrm, i).normalize()
+      const sun = Math.max(0, n.dot(SUN)) * LIGHT
+      c.copy(GROUND).lerp(SKY, 0.5 * n.y + 0.5).multiplyScalar(LIGHT).addScalar(sun)
+      if (old) c.multiply({ r: old.getX(i), g: old.getY(i), b: old.getZ(i) })
+      col.set([c.r, c.g, c.b], i * 3)
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3))
+    o.material = new THREE.MeshBasicMaterial({ name: m.name, color: m.color, map: m.map, transparent: m.transparent, opacity: m.opacity, side: m.side, vertexColors: true })
+  })
+}
+
 /** layer：ballotLayer()；回傳 { blob（.glb）, xf（場景 → 模型的換算：k、ox、oy、oz） } */
 export async function buildArGlb(layer, opts = {}) {
   const scene = layer.scene
@@ -100,9 +127,11 @@ export async function buildArGlb(layer, opts = {}) {
   scene.rotation.x = -Math.PI / 2 // z 朝上 → y 朝上
   try {
     const { model, xf } = buildArModel(scene, { size: AR.sizeM, minR: 0 })
-    const glb = await new GLTFExporter().parseAsync(model, { binary: true })
-    // usdz：iPhone AR Quick Look 用（同一個模型；scripts/export-ar.mjs 存成靜態檔）
+    // usdz：iPhone AR Quick Look 用（scripts/export-ar.mjs 存成靜態檔）；USDZ 只吃 MeshStandardMaterial，
+    //   所以在烘光之前做（Quick Look 用真實環境的光打，不用烘）
     const usdz = opts.usdz ? fixUsdz(await new USDZExporter().parseAsync(model)) : null
+    bakeLight(model)
+    const glb = await new GLTFExporter().parseAsync(model, { binary: true })
     return { blob: new Blob([glb], { type: 'model/gltf-binary' }), glb, usdz, xf }
   } finally {
     scene.rotation.x = rot
