@@ -1,0 +1,5 @@
+node_modules
+dist
+.DS_Store
+# 中選會原始檔、地理編碼快取（python3 src/scene/fetch_polling.py 重新產生）
+src/scene/data/raw/
