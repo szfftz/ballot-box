@@ -71,7 +71,9 @@ export async function buildModel(onState = () => {}) {
   await fitSign(map, ballots)
   onState('做 AR 模型中…')
   await new Promise((r) => setTimeout(r, 1500)) // 等圈票處、排隊小人載好（字型、貼圖）
-  const { glb, usdz, xf } = await buildArGlb(ballots, { usdz: true })
+  // 模型轉到 Day 27 的視角方向朝 +z（AR 會把 +z 朝著人放）：視角從方位 (360 − bearing)° 看過來 → 轉 −那麼多
+  const rotY = -(((360 - VIEW_3D.bearing) % 360) * Math.PI) / 180
+  const { glb, usdz, xf } = await buildArGlb(ballots, { usdz: true, rotY })
   // AR 預設視角＝3D 預設視角：距離照縮放換算（畫面比例 1.6 時），看的中心換成模型座標
   const lat = VIEW_3D.center[1]
   const mpp = (40075016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** VIEW_3D.zoom)

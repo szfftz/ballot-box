@@ -64,7 +64,8 @@ const loadScript = (src, attrs = {}) => new Promise((resolve, reject) => {
 
 // 預設視角：方位、傾斜照 Day 27 的 3D（從東南東斜看、傾斜 60°），距離 auto＝model-viewer 照畫面大小退到整個模型都看得到
 const FOV = '36.87deg'
-const ORBIT = `${(360 - VIEW_3D.bearing) % 360}deg ${VIEW_3D.pitch}deg auto`
+// 模型已經轉成 Day 27 的視角方向朝 +z（src/buildModel.js 的 rotY），所以方位是 0°：跟 AR 打開時人看的方向一樣
+const ORBIT = `0deg ${VIEW_3D.pitch}deg auto`
 // 縮放範圍：最近 5 公分；最遠＝看得到全部的距離 × 1.4（不要拉到模型變成一個點）；最低 85°，不能從地底往上看
 const MIN_ORBIT = 'auto 0deg 0.05m'
 let fullR = 0 // 看得到全部的距離

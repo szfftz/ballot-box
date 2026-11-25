@@ -92,7 +92,8 @@ function shadowSheet(scene, skip) {
 //   model-viewer 就照 3D 的明暗畫（箱子朝太陽的面亮、背光的面暗），不會被它自己的環境光打平
 // 模型座標 y 朝上（場景 z 朝上轉過來：場景 (x, y, z) → 模型 (x, z, −y)）
 const SKY = new THREE.Color('#ffffff'), GROUND = new THREE.Color('#5a5a66'), LIGHT = 1.6 / Math.PI
-const SUN = new THREE.Vector3(BALLOT.sun[0], BALLOT.sun[2], -BALLOT.sun[1]).normalize()
+const SUN0 = new THREE.Vector3(BALLOT.sun[0], BALLOT.sun[2], -BALLOT.sun[1]).normalize()
+let SUN = SUN0.clone() // 模型繞 y 轉過（opts.rotY）就跟著轉
 // 太陽方向的深度圖（軟體光柵化，跟 3D 的 shadow map 一樣的意思）：從太陽看過去，每一格記最靠近太陽的深度
 //   之後每個頂點查它那一格：前面有東西擋（深度比它靠近太陽）就在影子裡；3×3 格平均，邊緣柔一點（3D 是 PCF 柔化）
 //   影子深淺跟 3D 一樣（BALLOT.shadowIntensity）：在影子裡的太陽光剩 1 − 深淺
@@ -193,6 +194,11 @@ export async function buildArGlb(layer, opts = {}) {
     const { model, xf } = buildArModel(scene, { size: AR.sizeM, minR: 0 })
     // 縮放（1 : 50 萬）、位移直接烘進頂點，節點都不帶變換：USDZExporter 讀 matrixWorld（沒更新就是單位矩陣，
     //   iPhone 的模型會變成實際大小 500 公里，AR 打開什麼都看不到）；glb 也直接是公尺，Scene Viewer 不用自己算縮放
+    // opts.rotY：整個模型繞 y 軸轉幾度（弧度）。AR（iPhone Quick Look、Android Scene Viewer）都把模型的正面（+z）朝著人放，
+    //   轉到網頁預設的視角方向剛好是 +z，AR 打開看到的方向就跟網頁一樣
+    const rotY = opts.rotY ?? 0
+    model.rotation.y = rotY
+    SUN = SUN0.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), rotY)
     model.updateMatrixWorld(true)
     model.traverse((o) => { if (o.isMesh) o.geometry.applyMatrix4(o.matrixWorld) })
     model.traverse((o) => { o.position.set(0, 0, 0); o.quaternion.identity(); o.scale.set(1, 1, 1) })
