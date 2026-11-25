@@ -23,11 +23,12 @@ export const BALLOT = {
   red: '#d7263d', // 標誌的紅色圈
   shadow: '#3a4250', // 地上的影子（帶一點藍的灰，比純黑柔和）
   shadowOpacity: 0.32, // 真的陰影（shadow map），邊緣柔化
-  // 太陽在哪個方向（x 東、y 北、z 上）：2026-11-28 投票日上午 8:00（開始投票），台灣中心（23.7°N 120.9°E）的太陽
-  //   高度 19.32°、方位 125°（東南）；影子長＝箱高 ÷ tan(高度) ≈ 2.85 倍，往西北落
-  sun: [0.773, -0.5413, 0.3309],
-  sunAlt: 19.32,
-  sunAz: 125,
+  shadowIntensity: 0.6, // 陰影的深淺（1＝全黑；使用者要淡一點）
+  // 太陽在哪個方向（x 東、y 北、z 上）：2026-11-28 投票日上午 10:00，台灣中心（23.7°N 120.9°E）的太陽
+  //   高度 38.37°、方位 148.5°（東南偏南）；影子長＝箱高 ÷ tan(高度) ≈ 1.26 倍，往西北偏北落
+  sun: [0.4092, -0.6688, 0.6207],
+  sunAlt: 38.37,
+  sunAz: 148.5,
   m: 2000, // 箱寬幾公尺（立方體，固定，不隨縮放變）
   dropM: 2000, // 從幾公尺高掉下來（箱底的高度）；鄰近地點的箱子一開始會疊在一起的，往上錯開一層（一層＝箱寬的 1.2 倍）
   fallS: 1.6, // 從 8 km 掉到地面幾秒（決定重力；改 dropM 不影響重力）
@@ -223,7 +224,7 @@ export function ballotLayer(sites, saved = null, viewBearing = 0) {
       scene = new THREE.Scene()
       scene.add(new THREE.HemisphereLight('#ffffff', '#5a5a66', 1.6))
       const sun = new THREE.DirectionalLight('#ffffff', 1.6)
-      // 投票日上午 8 點的太陽（東南方）：光源放在太陽方向 1,000 km 外，照向台灣中間；影子相機蓋住全台加三排圈票處
+      // 投票日上午 10 點的太陽（東南偏南）：光源放在太陽方向 1,000 km 外，照向台灣中間；影子相機蓋住全台加三排圈票處
       sun.position.set(...BALLOT.sun.map((v) => v * 1e6))
       sun.target.position.set(-60000, 60000, 0)
       scene.add(sun, sun.target)
@@ -231,13 +232,15 @@ export function ballotLayer(sites, saved = null, viewBearing = 0) {
       Object.assign(sun.shadow.camera, { left: -520000, right: 520000, top: 520000, bottom: -520000, near: 1000, far: 2.5e6 })
       sun.shadow.mapSize.set(8192, 8192)
       sun.shadow.bias = -0.0004
-      sun.shadow.normalBias = 300
+      sun.shadow.normalBias = 250 // 東西自己身上不要出現條紋（shadow acne）
       sun.shadow.radius = 3
+      sun.shadow.intensity = BALLOT.shadowIntensity
       meshes = boxGeometries().map(([geo, c]) => {
         const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: c }), N)
         mesh.frustumCulled = false
         mesh.count = 0 // 位置算好之前先不畫
         mesh.castShadow = true
+        mesh.receiveShadow = true // 箱子之間互相投影（疊起來的箱子、旁邊的箱子會被影子蓋到）
         scene.add(mesh)
         return mesh
       })
@@ -264,7 +267,7 @@ export function ballotLayer(sites, saved = null, viewBearing = 0) {
       // 三排圈票處：中華民國（澎湖北邊）、地方公職人員選舉（綠島東北）、圈選章＋2026（澎湖西南）
       for (const { lonlat: ll, chars } of [BILLBOARD, BILLBOARD2, BILLBOARD3]) billboard(loc(ll), chars).then(({ group, parts }) => {
         if (!meshes) return
-        for (const part of parts) part.castShadow = true
+        for (const part of parts) part.castShadow = part.receiveShadow = true
         scene.add(group)
         renderer.shadowMap.needsUpdate = true
         map.triggerRepaint()
@@ -289,13 +292,13 @@ export function ballotLayer(sites, saved = null, viewBearing = 0) {
       signReady = groundText((lon, lat) => loc([lon, lat])).then(({ group, parts }) => {
         if (!meshes) return
         sign = group
-        for (const m of parts) m.castShadow = true
+        for (const m of parts) m.castShadow = m.receiveShadow = true
         scene.add(group)
         renderer.shadowMap.needsUpdate = true
         map.triggerRepaint()
       })
       for (const mesh of Q.meshes) {
-        mesh.castShadow = true
+        mesh.castShadow = mesh.receiveShadow = true
         mesh.frustumCulled = false
         scene.add(mesh)
       }

@@ -1,6 +1,6 @@
 // 2026 投開票所的 AR 模型：直接拿 3D 畫面的場景（ballotLayer 的 three.js scene）做，跟 3D 一樣：
 //   掉完的投票箱、三排圈票處（布簾、字）、排隊的小人、地上的字；不放地面
-//   影子：model-viewer 只有正上方的柔光影，沒有太陽方向，所以把 3D 的影子（11/28 早上 8 點的太陽）做成模型的一部分：
+//   影子：model-viewer 只有正上方的柔光影，沒有太陽方向，所以把 3D 的影子（11/28 上午 10 點的太陽）做成模型的一部分：
 //   每樣東西沿著太陽光方向壓扁到地上，畫進一張圖（重疊不會更黑），整張平貼在地上，半透明的灰（跟 3D 同色、同不透明度）
 //   投票箱只留箱身和投票口（投票口改成薄薄的長方形；標誌、名牌一個箱子幾百個三角形，1 萬多個箱子手機跑不動）
 // 用共用的 src/lib/arExport.js 攤平成 glb（同材質合併）；場景是 z 朝上，先轉成 glTF 的 y 朝上
@@ -82,19 +82,20 @@ function shadowSheet(scene, skip) {
   tex.colorSpace = THREE.SRGBColorSpace
   tex.userData.arFull = true // 不要縮成 512（影子邊緣才不會鋸齒）
   const w = W / k, h = H / k
-  const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: BALLOT.shadowOpacity, depthWrite: false }))
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: BALLOT.shadowOpacity * BALLOT.shadowIntensity, depthWrite: false }))
   plane.position.set(x0 - 1 / k + w / 2, y1 + 1 / k - h / 2, 3)
   return plane
 }
 
-// 3D 的打光烘進頂點顏色：跟 ballotLayer.js 一樣的半球光（天 #ffffff、地 #5a5a66、1.6）＋太陽平行光（1.6，投票日上午 8 點）
+// 3D 的打光烘進頂點顏色：跟 ballotLayer.js 一樣的半球光（天 #ffffff、地 #5a5a66、1.6）＋太陽平行光（1.6，投票日上午 10 點，BALLOT.sun）
 //   three.js 的 Lambert：顏色 ×（半球光 ＋ 太陽 × max(0, 法線·太陽)）÷ π；材質改成不受光（glTF 的 KHR_materials_unlit），
 //   model-viewer 就照 3D 的明暗畫（箱子朝太陽的面亮、背光的面暗），不會被它自己的環境光打平
 // 模型座標 y 朝上（場景 z 朝上轉過來：場景 (x, y, z) → 模型 (x, z, −y)）
 const SKY = new THREE.Color('#ffffff'), GROUND = new THREE.Color('#5a5a66'), LIGHT = 1.6 / Math.PI
 const SUN = new THREE.Vector3(BALLOT.sun[0], BALLOT.sun[2], -BALLOT.sun[1]).normalize()
 // 太陽方向的深度圖（軟體光柵化，跟 3D 的 shadow map 一樣的意思）：從太陽看過去，每一格記最靠近太陽的深度
-//   之後每個頂點查它那一格：前面有東西擋（深度比它靠近太陽）就在影子裡，太陽光不算；3×3 格平均，邊緣柔一點（3D 是 PCF 柔化）
+//   之後每個頂點查它那一格：前面有東西擋（深度比它靠近太陽）就在影子裡；3×3 格平均，邊緣柔一點（3D 是 PCF 柔化）
+//   影子深淺跟 3D 一樣（BALLOT.shadowIntensity）：在影子裡的太陽光剩 1 − 深淺
 const SM = 4096 // 深度圖解析度：桌上 1 公尺 → 一格約 0.3 公釐（箱子 4 公釐）
 function sunDepth(meshes) {
   const w = SUN.clone(), u = new THREE.Vector3(0, 1, 0).cross(w).normalize(), v = w.clone().cross(u)
@@ -167,7 +168,7 @@ function bakeLight(model) {
       if (m.side === THREE.DoubleSide && n.dot(SUN) < 0) n.negate()
       const d = n.dot(SUN)
       // 頂點沿法線往外推一點點再查（自己的面、箱子的角落不會誤判成擋住）
-      const sun = d > 0 ? d * LIGHT * sunLit(q.fromBufferAttribute(g.attributes.position, i).addScaledVector(n, 0.0002)) : 0
+      const sun = d > 0 ? d * LIGHT * (1 - BALLOT.shadowIntensity * (1 - sunLit(q.fromBufferAttribute(g.attributes.position, i).addScaledVector(n, 0.0002)))) : 0
       c.copy(GROUND).lerp(SKY, 0.5 * n.y + 0.5).multiplyScalar(LIGHT).addScalar(sun)
       if (old) c.multiply({ r: old.getX(i), g: old.getY(i), b: old.getZ(i) })
       col.set([c.r, c.g, c.b], i * 3)
