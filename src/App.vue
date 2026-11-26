@@ -202,7 +202,7 @@ function openAr() {
 }
 async function downloadUsdz() {
   arAbort = new AbortController()
-  arLoad.value = { step: 'download', got: 0, total: 0 }
+  arLoad.value = { step: 'download', got: 0, total: meta.usdzBytes || 0 }
   try {
     const res = await fetch(new URL(`${BASE}model/ballot-box.usdz?v=${meta.v}`, location.href), { signal: arAbort.signal })
     if (!res.ok) throw new Error(res.status)
