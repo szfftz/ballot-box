@@ -195,7 +195,7 @@ function openAr() {
     downloadUsdz()
     return
   }
-  arLoad.value = { step: 'opening', size: 25 }
+  arLoad.value = { step: 'opening', size: Math.round((meta.glbBytes || 25e6) / 1048576) }
   clearTimeout(arTimer)
   arTimer = setTimeout(() => { if (arLoad.value?.step === 'opening') arLoad.value = null }, 20000)
   mv.activateAR()
@@ -206,7 +206,7 @@ async function downloadUsdz() {
   try {
     const res = await fetch(new URL(`${BASE}model/ballot-box.usdz?v=${meta.v}`, location.href), { signal: arAbort.signal })
     if (!res.ok) throw new Error(res.status)
-    const total = +res.headers.get('content-length') || 0
+    const total = meta.usdzBytes || +res.headers.get('content-length') || 0
     const reader = res.body.getReader(), parts = []
     let got = 0
     for (;;) {

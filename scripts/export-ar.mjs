@@ -28,7 +28,7 @@ try {
   writeFileSync(new URL('ballot-box.usdz', OUT), u)
   // v：檔案內容的雜湊，網址帶著它（換了模型手機才不會讀到快取的舊檔）
   const v = createHash('sha1').update(g).update(u).digest('hex').slice(0, 10)
-  writeFileSync(new URL('meta.json', OUT), JSON.stringify({ ...meta, v }) + '\n')
+  writeFileSync(new URL('meta.json', OUT), JSON.stringify({ ...meta, v, usdzBytes: u.length, glbBytes: g.length }) /* 檔案大小：網頁下載 AR 模型時顯示進度用（伺服器壓縮傳送時沒有 content-length） */ + '\n')
   console.log(`完成：glb ${(g.length / 1e6).toFixed(1)} MB、usdz ${(u.length / 1e6).toFixed(1)} MB、v=${v}`)
 } finally {
   await browser.close()
