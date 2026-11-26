@@ -18,6 +18,33 @@
       <button v-if="canAr" class="ar-btn" @click="openAr"><span class="ar-label">放到你面前看 AR<small>（建議用 Wi-Fi）</small></span></button>
     </div>
 
+    <!-- AR 載入畫面：iPhone 先在網頁裡下載模型（看得到進度），下載完再按一次打開 Quick Look；Android 交給 Scene Viewer，等它接手 -->
+    <div v-if="arLoad" class="ar-load" @click.self="cancelAr">
+      <div class="ar-panel">
+        <template v-if="arLoad.step === 'download'">
+          <p class="ar-title">AR 模型下載中…</p>
+          <div class="bar"><i :style="{ width: (arLoad.total ? arLoad.got / arLoad.total * 100 : 5) + '%' }"></i></div>
+          <p class="ar-note">{{ mb(arLoad.got) }}{{ arLoad.total ? ' / ' + mb(arLoad.total) : '' }} MB　建議用 Wi-Fi</p>
+          <button class="ar-cancel" @click="cancelAr">取消</button>
+        </template>
+        <template v-else-if="arLoad.step === 'ready'">
+          <p class="ar-title">下載完成</p>
+          <button class="ar-go" @click="launchQuickLook">打開 AR</button>
+          <button class="ar-cancel" @click="cancelAr">取消</button>
+        </template>
+        <template v-else-if="arLoad.step === 'opening'">
+          <p class="ar-title"><span class="spin"></span>正在打開 AR…</p>
+          <p class="ar-note">模型約 {{ arLoad.size }} MB，第一次打開要下載一下，建議用 Wi-Fi</p>
+          <button class="ar-cancel" @click="cancelAr">關閉</button>
+        </template>
+        <template v-else>
+          <p class="ar-title">下載失敗</p>
+          <p class="ar-note">請確認網路後再試一次</p>
+          <button class="ar-cancel" @click="cancelAr">關閉</button>
+        </template>
+      </div>
+    </div>
+
     <section class="card" :class="{ open }">
       <header>
         <h1>Lining Up for Democracy</h1>
@@ -153,7 +180,69 @@ async function setupAr() {
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
   canAr.value = mv.canActivateAR
 }
-function openAr() { mv?.activateAR() }
+// 按 AR：
+//   iPhone（Quick Look）：Quick Look 下載模型時網頁看不到進度，畫面會像沒反應；所以網頁自己先下載（顯示進度），
+//     存成 blob，下載完再按「打開 AR」交給 Quick Look（新的一次點擊，Safari 才肯開）；下載過的留著，下次直接開
+//   Android（Scene Viewer）：模型由 Google App 自己下載（它有自己的進度條），網頁只顯示「正在打開」，離開網頁就收起來
+const arLoad = ref(null)
+let usdzBlobUrl = '', arAbort = null, arTimer = 0
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+const mb = (n) => (n / 1048576).toFixed(1)
+function openAr() {
+  if (!mv) return
+  if (IS_IOS) {
+    if (usdzBlobUrl) return launchQuickLook()
+    downloadUsdz()
+    return
+  }
+  arLoad.value = { step: 'opening', size: 25 }
+  clearTimeout(arTimer)
+  arTimer = setTimeout(() => { if (arLoad.value?.step === 'opening') arLoad.value = null }, 20000)
+  mv.activateAR()
+}
+async function downloadUsdz() {
+  arAbort = new AbortController()
+  arLoad.value = { step: 'download', got: 0, total: 0 }
+  try {
+    const res = await fetch(new URL(`${BASE}model/ballot-box.usdz?v=${meta.v}`, location.href), { signal: arAbort.signal })
+    if (!res.ok) throw new Error(res.status)
+    const total = +res.headers.get('content-length') || 0
+    const reader = res.body.getReader(), parts = []
+    let got = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      parts.push(value)
+      got += value.length
+      if (arLoad.value) arLoad.value = { step: 'download', got, total }
+    }
+    usdzBlobUrl = URL.createObjectURL(new Blob(parts, { type: 'model/vnd.usdz+zip' }))
+    if (arLoad.value) arLoad.value = { step: 'ready' }
+  } catch (e) {
+    if (e.name !== 'AbortError' && arLoad.value) arLoad.value = { step: 'error' }
+  }
+}
+// 跟 model-viewer 開 Quick Look 的做法一樣：rel="ar" 的連結，裡面要有一張 img，blob 要有 download 名字
+function launchQuickLook() {
+  const a = document.createElement('a')
+  a.rel = 'ar'
+  a.href = usdzBlobUrl
+  a.download = 'ballot-box.usdz'
+  a.appendChild(document.createElement('img'))
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  arLoad.value = null
+}
+function cancelAr() {
+  arAbort?.abort()
+  arAbort = null
+  clearTimeout(arTimer)
+  arLoad.value = null
+}
+// Android：Scene Viewer 打開了（網頁被蓋住）就收起載入畫面
+document.addEventListener('visibilitychange', () => { if (document.hidden && arLoad.value?.step === 'opening') arLoad.value = null })
 
 async function makeQr() {
   try {
@@ -192,6 +281,14 @@ onBeforeUnmount(() => { removeEventListener('resize', onResize); map?.remove(); 
 .map { position: absolute; inset: 0; }
 .controls { position: absolute; z-index: 3; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; } /* 兩個按鈕一樣寬（照長的那個） */
 .controls button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; padding: 0 18px; border: 0; border-radius: 999px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.ar-load { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0, 0, 0, 0.35); }
+.ar-panel { width: min(320px, 100%); padding: 22px 20px 16px; border-radius: 16px; background: #f4f4f4; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25); text-align: center; }
+.ar-title { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 0 0 14px; font-size: 16px; font-weight: 800; }
+.ar-note { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.bar { height: 8px; border-radius: 999px; background: rgba(22, 22, 22, 0.12); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 999px; background: var(--ink); transition: width 0.2s; }
+.ar-go { display: block; width: 100%; height: 46px; border: 0; border-radius: 999px; background: var(--ink); color: #f2f2f2; font-size: 15px; font-weight: 800; cursor: pointer; }
+.ar-cancel { margin-top: 12px; padding: 6px 16px; border: 0; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; }
 .ar-label { display: flex; flex-direction: column; align-items: center; line-height: 1.2; }
 .ar-label small { font-size: 11px; font-weight: 500; opacity: 0.75; }
 .ar-btn { background: var(--ink); color: #f2f2f2; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2); }
