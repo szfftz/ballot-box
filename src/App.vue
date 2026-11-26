@@ -38,7 +38,7 @@
         <p>想用 AR 看？用手機相機掃這個 QR code，打開網頁後按「放到你面前看（AR）」，模型就會出現在你面前的地板上。</p>
       </div>
       <!-- 簽名：左邊內容區最下面、置中 -->
-      <p class="sign">szfftz</p>
+      <p class="sign">{{ VERSION }} szfftz</p>
     </section>
   </div>
 </template>
@@ -56,6 +56,7 @@ const qrSvg = ref('')
 const open = ref(false)
 const ready = ref(false)
 const canAr = ref(false)
+const VERSION = __APP_VERSION__ // vite.config.js 的 define
 let map = null, mv = null, moved = false, PTS = [], meta = null
 
 const loadScript = (src, attrs = {}) => new Promise((resolve, reject) => {
