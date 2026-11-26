@@ -15,7 +15,7 @@
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.5h4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         回到預設
       </button>
-      <button v-if="canAr" class="ar-btn" @click="openAr">放到你面前看（AR）</button>
+      <button v-if="canAr" class="ar-btn" @click="openAr"><span class="ar-label">放到你面前看 AR<small>（建議用 Wi-Fi）</small></span></button>
     </div>
 
     <section class="card" :class="{ open }">
@@ -191,6 +191,8 @@ onBeforeUnmount(() => { removeEventListener('resize', onResize); map?.remove(); 
 .map { position: absolute; inset: 0; }
 .controls { position: absolute; z-index: 3; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; } /* 兩個按鈕一樣寬（照長的那個） */
 .controls button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; padding: 0 18px; border: 0; border-radius: 999px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.ar-label { display: flex; flex-direction: column; align-items: center; line-height: 1.2; }
+.ar-label small { font-size: 11px; font-weight: 500; opacity: 0.75; }
 .ar-btn { background: var(--ink); color: #f2f2f2; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2); }
 .ar-state { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; display: flex; align-items: center; gap: 10px; font-size: 15px; }
 .reset { background: var(--card); color: var(--ink); backdrop-filter: blur(8px); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12); }
